@@ -6,19 +6,29 @@
   "license": "MIT",
   "type": "commonjs",
   "scripts": {
-    "start": "ts-node src/main.ts",
-    "build": "tsc -p tsconfig.json"
+    "dev": "node --require ts-node/register --watch src/main.ts",
+    "start": "node dist/main.js",
+    "start:dev": "ts-node-dev --respawn --transpile-only --files src/main.ts",
+    "start:prod": "node dist/main.js",
+    "build": "tsc -p tsconfig.json",
+    "lint": "echo 'No linting configured yet'"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",
+    "@nestjs/config": "^4.0.0",
     "@nestjs/core": "^11.0.0",
     "@nestjs/platform-express": "^11.0.0",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.1",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.9.1",
+    "@types/uuid": "^11.0.0",
     "ts-node": "^10.9.2",
+    "ts-node-dev": "^2.0.0",
     "typescript": "^5.6.3"
   }
 }

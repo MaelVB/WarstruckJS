@@ -1,8 +1,13 @@
-import { Badge, Box, Container, Grid, Group, List, Stack, Text, Title } from '@mantine/core';
+'use client';
+
+import { Badge, Box, Button, Container, Grid, Group, List, Stack, Text, Title } from '@mantine/core';
+import { useRouter } from 'next/navigation';
 import { PieceCard } from './components/PieceCard';
 import { pieces, rules } from '../lib/gameData';
 
 export default function HomePage() {
+  const router = useRouter();
+
   return (
     <Container size="lg" py="xl">
       <Stack gap="lg">
@@ -17,6 +22,24 @@ export default function HomePage() {
             NestJS + Next.js + MongoDB (à venir) + Mantine. Aperçu des règles et des quatre premières unités.
           </Text>
         </Box>
+
+        <Group justify="center" gap="md">
+          <Button
+            size="lg"
+            onClick={() => router.push('/game')}
+            color="blue"
+            variant="filled"
+          >
+            🎮 Jouer (Mode Démo)
+          </Button>
+          <Button
+            size="lg"
+            variant="outline"
+            onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })}
+          >
+            📖 Voir les règles
+          </Button>
+        </Group>
 
         <Box>
           <Title order={2} mb="xs">

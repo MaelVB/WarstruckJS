@@ -1,9 +1,12 @@
-import { Injectable } from '@nestjs/common';
-import { Ability, GameConfig, PieceDefinition } from './game.types';
+import { Injectable, Logger } from '@nestjs/common';
+import { Ability, GameConfig, PieceDefinition } from './interfaces/game.interface';
 
 @Injectable()
 export class GameService {
+  private readonly logger = new Logger(GameService.name);
+
   getConfig(): GameConfig {
+    this.logger.debug('Fetching game configuration');
     return {
       terminology: {
         reinforcementColumn: 'Colonne H - colonne des renforts',
