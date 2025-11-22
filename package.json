@@ -1,0 +1,14 @@
+{
+  "name": "warstruckjs-monorepo",
+  "private": true,
+  "packageManager": "pnpm@9.12.0",
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "start": "turbo start"
+  },
+  "devDependencies": {
+    "turbo": "^2.2.3"
+  }
+}
