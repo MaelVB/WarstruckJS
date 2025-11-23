@@ -38,9 +38,11 @@ export interface Player {
   reinforcements: ReinforcementPiece[];
   actionPoints: number;
   generalAdvanced: boolean;
+  deckSelected: boolean;
+  hasDeployedThisTurn: boolean;
 }
 
-export type GamePhase = 'setup' | 'playing' | 'finished';
+export type GamePhase = 'deck-selection' | 'setup' | 'playing' | 'finished';
 
 export interface GameState {
   id: string;

@@ -1,17 +1,20 @@
-import { IsArray, IsString, IsNumber, ArrayMinSize, ArrayMaxSize, ValidateNested } from 'class-validator';
+import { IsArray, IsString, IsNumber, ArrayMinSize, ArrayMaxSize, ValidateNested, IsEnum, IsOptional } from 'class-validator';
 import { Type } from 'class-transformer';
 import { PieceId } from '../interfaces/game.interface';
 
 export class CreateGameDto {
-  @IsArray()
-  @ArrayMinSize(20)
-  @ArrayMaxSize(20)
-  player1Deck!: PieceId[];
+  // Maintenant on crée une partie vide, les decks seront choisis après
+}
+
+export class SelectDeckDto {
+  @IsString()
+  playerId!: string;
 
   @IsArray()
-  @ArrayMinSize(20)
-  @ArrayMaxSize(20)
-  player2Deck!: PieceId[];
+  @ArrayMinSize(19)
+  @ArrayMaxSize(19)
+  @IsEnum(['colonel', 'infantryman', 'scout'], { each: true })
+  selectedPieces!: PieceId[];
 }
 
 export class PositionDto {
@@ -45,11 +48,30 @@ export class GameActionDto {
   @IsString()
   type!: string;
 
+  @IsOptional()
+  @IsString()
   pieceId?: string;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => PositionDto)
   from?: PositionDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => PositionDto)
   to?: PositionDto;
+
+  @IsOptional()
+  @IsString()
   targetPieceId?: string;
+
+  @IsOptional()
+  @IsString()
   abilityName?: string;
+
+  @IsOptional()
+  @IsString()
   reservePieceId?: string;
 }
 

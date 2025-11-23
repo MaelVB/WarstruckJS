@@ -1,6 +1,7 @@
-import { Controller, Get, Post, Body, Param, Logger } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Logger, Query } from '@nestjs/common';
 import { GameService } from './game.service';
 import { GameBoardService } from './game-board.service';
+import { GamePersistenceService } from './game-persistence.service';
 import {
   GameConfig,
   GameState,
@@ -11,10 +12,12 @@ import {
 } from './interfaces/game.interface';
 import {
   CreateGameDto,
+  SelectDeckDto,
   PlaceGeneralDto,
   SetupReinforcementsDto,
   ExecuteActionDto,
 } from './dto/game.dto';
+import { GameActionRecord, GameMetadata } from './interfaces/game-history.interface';
 
 @Controller('game')
 export class GameController {
@@ -23,6 +26,7 @@ export class GameController {
   constructor(
     private readonly gameService: GameService,
     private readonly gameBoardService: GameBoardService,
+    private readonly persistenceService: GamePersistenceService,
   ) {}
 
   @Get('config')
@@ -31,27 +35,37 @@ export class GameController {
   }
 
   @Post('create')
-  createGame(@Body() createGameDto: CreateGameDto): GameState {
+  async createGame(@Body() createGameDto: CreateGameDto): Promise<GameState> {
     this.logger.log('Creating new game');
-    return this.gameBoardService.createGame(
-      createGameDto.player1Deck,
-      createGameDto.player2Deck,
+    return await this.gameBoardService.createGame();
+  }
+
+  @Post(':gameId/select-deck')
+  async selectDeck(
+    @Param('gameId') gameId: string,
+    @Body() selectDeckDto: SelectDeckDto,
+  ): Promise<GameState> {
+    this.logger.log(`Selecting deck for game: ${gameId}`);
+    return await this.gameBoardService.selectDeck(
+      gameId,
+      selectDeckDto.playerId as PlayerId,
+      selectDeckDto.selectedPieces,
     );
   }
 
   @Get(':gameId')
-  getGame(@Param('gameId') gameId: string): GameState {
+  async getGame(@Param('gameId') gameId: string): Promise<GameState> {
     this.logger.log(`Fetching game: ${gameId}`);
-    return this.gameBoardService.getGame(gameId);
+    return await this.gameBoardService.getGame(gameId);
   }
 
   @Post(':gameId/place-general')
-  placeGeneral(
+  async placeGeneral(
     @Param('gameId') gameId: string,
     @Body() placeGeneralDto: PlaceGeneralDto,
-  ): GameState {
+  ): Promise<GameState> {
     this.logger.log(`Placing general for game: ${gameId}`);
-    return this.gameBoardService.placeGeneral(
+    return await this.gameBoardService.placeGeneral(
       gameId,
       placeGeneralDto.playerId as PlayerId,
       placeGeneralDto.position,
@@ -59,12 +73,12 @@ export class GameController {
   }
 
   @Post(':gameId/setup-reinforcements')
-  setupReinforcements(
+  async setupReinforcements(
     @Param('gameId') gameId: string,
     @Body() setupReinforcementsDto: SetupReinforcementsDto,
-  ): GameState {
+  ): Promise<GameState> {
     this.logger.log(`Setting up reinforcements for game: ${gameId}`);
-    return this.gameBoardService.setupReinforcements(
+    return await this.gameBoardService.setupReinforcements(
       gameId,
       setupReinforcementsDto.playerId as PlayerId,
       setupReinforcementsDto.pieceIds,
@@ -72,21 +86,51 @@ export class GameController {
   }
 
   @Post(':gameId/start')
-  startGame(@Param('gameId') gameId: string): GameState {
+  async startGame(@Param('gameId') gameId: string): Promise<GameState> {
     this.logger.log(`Starting game: ${gameId}`);
-    return this.gameBoardService.startGame(gameId);
+    return await this.gameBoardService.startGame(gameId);
   }
 
   @Post(':gameId/action')
-  executeAction(
+  async executeAction(
     @Param('gameId') gameId: string,
     @Body() executeActionDto: ExecuteActionDto,
-  ): GameState {
+  ): Promise<GameState> {
     this.logger.log(`Executing action for game: ${gameId}`);
-    return this.gameBoardService.executeAction(
+    return await this.gameBoardService.executeAction(
       gameId,
       executeActionDto.playerId as PlayerId,
       executeActionDto.action as GameAction,
     );
+  }
+
+  @Get('list')
+  async listGames(): Promise<GameMetadata[]> {
+    this.logger.log('Listing all games');
+    return await this.persistenceService.getAllGames();
+  }
+
+  @Get(':gameId/history')
+  async getGameHistory(@Param('gameId') gameId: string): Promise<GameActionRecord[]> {
+    this.logger.log(`Fetching history for game: ${gameId}`);
+    return await this.persistenceService.getGameHistory(gameId);
+  }
+
+  @Get(':gameId/replay/action/:actionId')
+  async replayToAction(
+    @Param('gameId') gameId: string,
+    @Param('actionId') actionId: string,
+  ): Promise<GameState> {
+    this.logger.log(`Replaying game ${gameId} to action ${actionId}`);
+    return await this.persistenceService.replayToAction(gameId, actionId);
+  }
+
+  @Get(':gameId/replay/turn/:turnNumber')
+  async replayToTurn(
+    @Param('gameId') gameId: string,
+    @Param('turnNumber') turnNumber: string,
+  ): Promise<GameState> {
+    this.logger.log(`Replaying game ${gameId} to turn ${turnNumber}`);
+    return await this.persistenceService.replayToTurn(gameId, parseInt(turnNumber, 10));
   }
 }

@@ -2,7 +2,7 @@
 
 Jeu de plateau tactique Warstruck implémenté avec **NestJS** (serveur) et **Next.js** (client web). Ce prototype inclut un plateau de jeu interactif 8x8 avec système de tours, gestion des pièces, et mécaniques de jeu complètes.
 
-> ✨ **Nouveau** : Le projet a été récemment refactorisé selon les meilleures pratiques NestJS ! Voir [SUMMARY.md](./SUMMARY.md) pour les détails.
+> ✨ **Nouveau** : Gestion complète des parties avec UUID, **persistance MongoDB**, historique et système de replay ! Voir [CHANGELOG.md](./CHANGELOG.md) pour les détails.
 
 ## 🎮 Fonctionnalités Principales
 
@@ -14,18 +14,21 @@ Jeu de plateau tactique Warstruck implémenté avec **NestJS** (serveur) et **Ne
 - **Renforts et réserve** : système de file avec pièces face cachée
 - **Condition de victoire** : élimination du général adverse
 - **Interface interactive** : sélection et déplacement de pièces en temps réel
-- **Mode démo** fonctionnel pour tester le jeu
+- **🆕 Gestion des parties** : UUID unique, URLs persistantes, rechargement (F5) sans perte
+- **🆕 Historique complet** : Chaque action est enregistrée avec timestamp
+- **🆕 Système de replay** : Rejouer une partie action par action ou par tour
+- **🆕 Liste des parties** : Vue d'ensemble de toutes les parties en cours et terminées
 
 ### 🚧 À Venir
 - Grilles de déplacement spécifiques par pièce
 - Zones d'influence des hauts gradés
 - Effets des capacités actives
 - Système de combos d'unités
-- Connexion client-serveur via API
-- Persistence MongoDB
-- Mode multijoueur
+- Authentification des joueurs
+- WebSockets pour multijoueur en temps réel
+- Statistiques et analyse de parties
 
-Voir [IMPLEMENTATION.md](./IMPLEMENTATION.md) pour les détails complets.
+Voir [IMPLEMENTATION.md](./IMPLEMENTATION.md) et [GAME_MANAGEMENT.md](./GAME_MANAGEMENT.md) pour les détails complets.
 
 ## 📁 Structure
 
@@ -125,11 +128,18 @@ pnpm build
 
 ### Gestion de Partie
 - `POST /game/create` - Créer une nouvelle partie
+- `GET /game/list` - **🆕** Liste de toutes les parties
 - `GET /game/:gameId` - Obtenir l'état d'une partie
+- `POST /game/:gameId/select-deck` - Sélectionner le deck (20 pièces)
 - `POST /game/:gameId/place-general` - Placer le général (setup)
 - `POST /game/:gameId/setup-reinforcements` - Configurer les renforts (setup)
 - `POST /game/:gameId/start` - Démarrer la partie
 - `POST /game/:gameId/action` - Exécuter une action
+
+### Historique et Replay
+- `GET /game/:gameId/history` - **🆕** Historique complet d'une partie
+- `GET /game/:gameId/replay/action/:actionId` - **🆕** Rejouer jusqu'à une action
+- `GET /game/:gameId/replay/turn/:turnNumber` - **🆕** Rejouer jusqu'à un tour
 
 ## 🛠️ Technologies
 
@@ -162,12 +172,16 @@ pnpm build
 | Fichier | Description |
 |---------|-------------|
 | [QUICKSTART.md](./QUICKSTART.md) | Guide de démarrage rapide |
+| [USAGE_GUIDE.md](./USAGE_GUIDE.md) | **🆕** Guide utilisateur du système de parties |
+| [GAME_MANAGEMENT.md](./GAME_MANAGEMENT.md) | **🆕** Documentation technique du système de gestion |
+| [API_TESTING.md](./API_TESTING.md) | **🆕** Guide de test de l'API avec exemples |
+| [CHANGELOG.md](./CHANGELOG.md) | **🆕** Historique des changements |
 | [SUMMARY.md](./SUMMARY.md) | Résumé de la refactorisation |
 | [REFACTORING.md](./REFACTORING.md) | Détails de la refactorisation |
 | [PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md) | Structure complète du projet |
 | [IMPLEMENTATION.md](./IMPLEMENTATION.md) | Règles du jeu détaillées |
 | [server/README.md](./server/README.md) | Documentation backend |
-| [server/API_TESTS.md](./server/API_TESTS.md) | Guide de test de l'API |
+| [server/API_TESTS.md](./server/API_TESTS.md) | Tests API (ancien) |
 
 ## 📝 Contribuer
 

@@ -73,9 +73,12 @@ export interface Player {
   reinforcements: ReinforcementPiece[]; // 4 pièces max
   actionPoints: number;
   generalAdvanced: boolean; // true si le général de l'attaquant a déjà avancé
+  deckSelected: boolean; // true si le joueur a choisi son deck
+  hasDeployedThisTurn: boolean; // true si le joueur a déjà déployé une unité ce tour
 }
 
 export type GamePhase = 
+  | 'deck-selection' // Sélection des 20 pièces par chaque joueur
   | 'setup' // Placement du général et choix des 4 pièces de renforts
   | 'playing' // Partie en cours
   | 'finished'; // Partie terminée

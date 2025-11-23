@@ -12,20 +12,19 @@ import {
   ReservePiece,
   PieceDefinition,
 } from './interfaces/game.interface';
+import { GamePersistenceService } from './game-persistence.service';
 
 @Injectable()
 export class GameBoardService {
   private readonly logger = new Logger(GameBoardService.name);
-  private games: Map<string, GameState> = new Map();
+
+  constructor(private readonly persistenceService: GamePersistenceService) {}
 
   /**
-   * Crée une nouvelle partie
+   * Crée une nouvelle partie (sans decks, ils seront choisis après)
    */
-  createGame(player1Deck: PieceId[], player2Deck: PieceId[]): GameState {
-    this.logger.log('Creating new game with decks');
-    if (player1Deck.length !== 20 || player2Deck.length !== 20) {
-      throw new BadRequestException('Chaque joueur doit avoir exactement 20 pièces dans son deck');
-    }
+  async createGame(): Promise<GameState> {
+    this.logger.log('Creating new game (deck selection phase)');
 
     const gameId = uuidv4();
     
@@ -35,27 +34,23 @@ export class GameBoardService {
     const player1: Player = {
       id: 'player1',
       role: isPlayer1Attacker ? 'attacker' : 'defender',
-      deck: player1Deck.map(pieceType => ({
-        id: uuidv4(),
-        pieceType,
-        owner: 'player1',
-      })),
+      deck: [],
       reinforcements: [],
       actionPoints: 0,
       generalAdvanced: false,
+      deckSelected: false,
+      hasDeployedThisTurn: false,
     };
 
     const player2: Player = {
       id: 'player2',
       role: isPlayer1Attacker ? 'defender' : 'attacker',
-      deck: player2Deck.map(pieceType => ({
-        id: uuidv4(),
-        pieceType,
-        owner: 'player2',
-      })),
+      deck: [],
       reinforcements: [],
       actionPoints: 0,
       generalAdvanced: false,
+      deckSelected: false,
+      hasDeployedThisTurn: false,
     };
 
     // Créer le plateau vide (8x8)
@@ -63,7 +58,7 @@ export class GameBoardService {
 
     const gameState: GameState = {
       id: gameId,
-      phase: 'setup',
+      phase: 'deck-selection',
       board,
       players: { player1, player2 },
       currentPlayer: player1.role === 'defender' ? 'player1' : 'player2', // Le défenseur commence
@@ -71,26 +66,76 @@ export class GameBoardService {
       actionsThisTurn: 0,
     };
 
-    this.games.set(gameId, gameState);
+    // Sauvegarder la nouvelle partie
+    await this.persistenceService.saveNewGame(gameState);
+    
     return gameState;
+  }
+
+  /**
+   * Sélectionner le deck d'un joueur
+   */
+  async selectDeck(gameId: string, playerId: PlayerId, selectedPieces: PieceId[]): Promise<GameState> {
+    const game = await this.persistenceService.getCurrentGameState(gameId);
+    this.ensureBoardIsArray(game);
+    
+    if (game.phase !== 'deck-selection') {
+      throw new BadRequestException('La sélection des decks n\'est possible qu\'en phase de sélection');
+    }
+
+    if (selectedPieces.length !== 19) {
+      throw new BadRequestException('Vous devez sélectionner exactement 19 pièces (le Général est ajouté automatiquement)');
+    }
+
+    // Vérifier que toutes les pièces sont des types autorisés (colonel, infantryman, scout)
+    const allowedTypes: PieceId[] = ['colonel', 'infantryman', 'scout'];
+    for (const pieceType of selectedPieces) {
+      if (!allowedTypes.includes(pieceType)) {
+        throw new BadRequestException(`Type de pièce non autorisé: ${pieceType}. Seuls les Colonels, Fantassins et Éclaireurs peuvent être sélectionnés.`);
+      }
+    }
+
+    const player = game.players[playerId];
+
+    if (player.deckSelected) {
+      throw new BadRequestException('Vous avez déjà sélectionné votre deck');
+    }
+
+    // Créer le deck avec un général automatiquement ajouté
+    const deckWithGeneral: PieceId[] = ['general', ...selectedPieces];
+    
+    player.deck = deckWithGeneral.map(pieceType => ({
+      id: uuidv4(),
+      pieceType,
+      owner: playerId,
+    }));
+    player.deckSelected = true;
+
+    // Si les deux joueurs ont sélectionné leur deck, passer à la phase de setup
+    if (game.players.player1.deckSelected && game.players.player2.deckSelected) {
+      game.phase = 'setup';
+      this.logger.log('Both players have selected their decks. Moving to setup phase.');
+    }
+
+    // Mettre à jour la partie persistée
+    await this.persistenceService.updateGameState(gameId, game);
+    
+    return game;
   }
 
   /**
    * Obtenir l'état d'une partie
    */
-  getGame(gameId: string): GameState {
-    const game = this.games.get(gameId);
-    if (!game) {
-      throw new BadRequestException('Partie introuvable');
-    }
-    return game;
+  async getGame(gameId: string): Promise<GameState> {
+    return await this.persistenceService.getCurrentGameState(gameId);
   }
 
   /**
    * Placer le général lors du setup
    */
-  placeGeneral(gameId: string, playerId: PlayerId, position: Position): GameState {
-    const game = this.getGame(gameId);
+  async placeGeneral(gameId: string, playerId: PlayerId, position: Position): Promise<GameState> {
+    const game = await this.persistenceService.getCurrentGameState(gameId);
+    this.ensureBoardIsArray(game);
     
     if (game.phase !== 'setup') {
       throw new BadRequestException('Le placement du général n\'est possible qu\'en phase de setup');
@@ -128,15 +173,18 @@ export class GameBoardService {
 
     game.board[position.row][position.col] = general;
 
-    this.games.set(gameId, game);
+    // Mettre à jour la partie persistée
+    await this.persistenceService.updateGameState(gameId, game);
+    
     return game;
   }
 
   /**
    * Choisir 4 pièces pour les renforts lors du setup
    */
-  setupReinforcements(gameId: string, playerId: PlayerId, pieceIds: string[]): GameState {
-    const game = this.getGame(gameId);
+  async setupReinforcements(gameId: string, playerId: PlayerId, pieceIds: string[]): Promise<GameState> {
+    const game = await this.persistenceService.getCurrentGameState(gameId);
+    this.ensureBoardIsArray(game);
     
     if (game.phase !== 'setup') {
       throw new BadRequestException('Le setup des renforts n\'est possible qu\'en phase de setup');
@@ -169,33 +217,83 @@ export class GameBoardService {
       queuePosition: index,
     }));
 
-    this.games.set(gameId, game);
+    // Mettre à jour la partie persistée
+    await this.persistenceService.updateGameState(gameId, game);
+    
     return game;
   }
 
   /**
    * Démarrer la partie après le setup
    */
-  startGame(gameId: string): GameState {
-    const game = this.getGame(gameId);
+  async startGame(gameId: string): Promise<GameState> {
+    try {
+      const game = await this.persistenceService.getCurrentGameState(gameId);
+      
+      if (game.phase !== 'setup') {
+        throw new BadRequestException('La partie a déjà commencé ou est terminée');
+      }
+
+      // Vérifier que les renforts sont configurés
+      if (game.players.player1.reinforcements.length !== 4 || 
+          game.players.player2.reinforcements.length !== 4) {
+        throw new BadRequestException('Chaque joueur doit avoir 4 pièces en renforts');
+      }
+
+      // Assurer que le board est un vrai tableau 2D (après désérialisation MongoDB)
+      this.logger.debug(`Before ensureBoardIsArray: board exists=${!!game.board}, is array=${Array.isArray(game.board)}`);
+      this.ensureBoardIsArray(game);
+      this.logger.debug(`After ensureBoardIsArray: board length=${game.board.length}, all rows are arrays=${game.board.every(row => Array.isArray(row))}`);
+
+      // Placer automatiquement les généraux si ce n'est pas déjà fait
+      let player1General = this.findPieceOnBoard(game, 'player1', 'general');
+      let player2General = this.findPieceOnBoard(game, 'player2', 'general');
     
-    if (game.phase !== 'setup') {
-      throw new BadRequestException('La partie a déjà commencé ou est terminée');
+    if (!player1General) {
+      // Placer le général du joueur 1 (défenseur) en D1 (row 7, col 3)
+      const generalPiece1 = game.players.player1.deck.find(p => p.pieceType === 'general');
+      if (generalPiece1) {
+        game.players.player1.deck = game.players.player1.deck.filter(p => p.id !== generalPiece1.id);
+        player1General = {
+          id: generalPiece1.id,
+          pieceType: 'general',
+          owner: 'player1',
+          position: { row: 7, col: 3 },
+          faceUp: true,
+          usedAbilities: {
+            'Parachutage': 2,
+            'En avant !': 3,
+          },
+        };
+        game.board[7][3] = player1General;
+        this.logger.log('Général du joueur 1 placé automatiquement en D1');
+      }
+    }
+    
+    if (!player2General) {
+      // Placer le général du joueur 2 en D8 (row 0, col 3)
+      const generalPiece2 = game.players.player2.deck.find(p => p.pieceType === 'general');
+      if (generalPiece2) {
+        game.players.player2.deck = game.players.player2.deck.filter(p => p.id !== generalPiece2.id);
+        player2General = {
+          id: generalPiece2.id,
+          pieceType: 'general',
+          owner: 'player2',
+          position: { row: 0, col: 3 },
+          faceUp: true,
+          usedAbilities: {
+            'Parachutage': 2,
+            'En avant !': 3,
+          },
+        };
+        game.board[0][3] = player2General;
+        this.logger.log('Général du joueur 2 placé automatiquement en D8');
+      }
     }
 
-    // Vérifier que les deux généraux sont placés
-    const player1General = this.findPieceOnBoard(game, 'player1', 'general');
-    const player2General = this.findPieceOnBoard(game, 'player2', 'general');
-    
-    if (!player1General || !player2General) {
-      throw new BadRequestException('Les deux généraux doivent être placés');
-    }
-
-    // Vérifier que les renforts sont configurés
-    if (game.players.player1.reinforcements.length !== 4 || 
-        game.players.player2.reinforcements.length !== 4) {
-      throw new BadRequestException('Chaque joueur doit avoir 4 pièces en renforts');
-    }
+    // Placer automatiquement les renforts sur le plateau dans la colonne H
+    this.placeReinforcementsOnBoard(game, 'player1');
+    this.placeReinforcementsOnBoard(game, 'player2');
 
     // Avancer le général de l'attaquant d'une case
     const attacker = game.players.player1.role === 'attacker' ? game.players.player1 : game.players.player2;
@@ -203,8 +301,18 @@ export class GameBoardService {
     
     if (attackerGeneralPiece) {
       const newRow = attacker.id === 'player1' ? 
-        attackerGeneralPiece.position.row + 1 : 
-        attackerGeneralPiece.position.row - 1;
+        attackerGeneralPiece.position.row - 1 : 
+        attackerGeneralPiece.position.row + 1;
+      
+      this.logger.debug(`Moving attacker general from [${attackerGeneralPiece.position.row}, ${attackerGeneralPiece.position.col}] to [${newRow}, ${attackerGeneralPiece.position.col}]`);
+      this.logger.debug(`Board exists: ${!!game.board}, Board is array: ${Array.isArray(game.board)}, Board length: ${game.board?.length}`);
+      this.logger.debug(`Board[${newRow}] exists: ${!!game.board[newRow]}, is array: ${Array.isArray(game.board[newRow])}`);
+      
+      // Vérifier que la nouvelle ligne existe
+      if (!game.board[newRow]) {
+        this.logger.error(`Board row ${newRow} does not exist! Reinitializing...`);
+        this.ensureBoardIsArray(game);
+      }
       
       // Effacer l'ancienne position
       game.board[attackerGeneralPiece.position.row][attackerGeneralPiece.position.col] = null;
@@ -216,14 +324,45 @@ export class GameBoardService {
       attacker.generalAdvanced = true;
     }
 
-    game.phase = 'playing';
-    game.turnNumber = 1;
-    
-    // Calculer les points d'action pour le premier tour
-    this.calculateActionPoints(game);
+      game.phase = 'playing';
+      game.turnNumber = 1;
+      
+      // Calculer les points d'action pour le premier tour
+      this.calculateActionPoints(game);
 
-    this.games.set(gameId, game);
-    return game;
+      // Mettre à jour la partie persistée
+      await this.persistenceService.updateGameState(gameId, game);
+      
+      return game;
+    } catch (error) {
+      this.logger.error(`Error starting game ${gameId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Normaliser le plateau pour s'assurer qu'il est un vrai tableau 2D
+   * (utile après désérialisation MongoDB)
+   */
+  private ensureBoardIsArray(game: GameState): void {
+    if (!game.board || !Array.isArray(game.board)) {
+      this.logger.warn('Board is not an array, reinitializing');
+      game.board = Array(8).fill(null).map(() => Array(8).fill(null));
+      return;
+    }
+
+    // S'assurer que chaque ligne est un vrai tableau
+    for (let i = 0; i < 8; i++) {
+      if (!game.board[i] || !Array.isArray(game.board[i])) {
+        this.logger.warn(`Board row ${i} is not an array, reinitializing`);
+        game.board[i] = Array(8).fill(null);
+      }
+      // S'assurer que la ligne a 8 colonnes
+      if (game.board[i].length !== 8) {
+        const oldLength = game.board[i].length;
+        game.board[i] = [...game.board[i], ...Array(8 - oldLength).fill(null)].slice(0, 8);
+      }
+    }
   }
 
   /**
@@ -252,23 +391,82 @@ export class GameBoardService {
   }
 
   /**
+   * Placer les renforts sur le plateau dans la colonne H
+   */
+  private placeReinforcementsOnBoard(game: GameState, playerId: PlayerId): void {
+    const player = game.players[playerId];
+    const col = 7; // Colonne H
+
+    this.logger.debug(`Placing reinforcements for ${playerId}, board length: ${game.board.length}`);
+
+    // Vérifier si les renforts sont déjà sur le plateau
+    const hasReinforcementsOnBoard = player.reinforcements.some(reinf => {
+      return game.board.some(row => row?.some(cell => cell?.id === reinf.id));
+    });
+
+    if (hasReinforcementsOnBoard) {
+      this.logger.debug(`Reinforcements already placed for ${playerId}`);
+      return; // Déjà placés
+    }
+
+    // Placer les renforts
+    player.reinforcements.forEach((reinf, index) => {
+      let row: number;
+      
+      if (playerId === 'player1') {
+        // Joueur 1 (ligne 1): H4=row 4, H3=row 5, H2=row 6, H1=row 7
+        row = 4 + index;
+      } else {
+        // Joueur 2 (ligne 8): H5=row 3, H6=row 2, H7=row 1, H8=row 0
+        row = 3 - index;
+      }
+
+      this.logger.debug(`Attempting to place ${reinf.pieceType} at [${row}, ${col}]. Board[${row}] exists: ${!!game.board[row]}`);
+
+      // Vérifier que la ligne existe
+      if (!game.board[row]) {
+        this.logger.error(`Board[${row}] is undefined! This should not happen after ensureBoardIsArray`);
+        return;
+      }
+
+      // Ne placer que si la case est libre
+      if (!game.board[row][col]) {
+        const reinforcementPiece: BoardPiece = {
+          id: reinf.id,
+          pieceType: reinf.pieceType,
+          owner: playerId,
+          position: { row, col },
+          faceUp: true,
+          usedAbilities: this.initializeAbilities(reinf.pieceType),
+        };
+        game.board[row][col] = reinforcementPiece;
+        this.logger.debug(`Renfort ${reinf.pieceType} du joueur ${playerId} placé en position [${row}, ${col}]`);
+      }
+    });
+  }
+
+  /**
    * Exécuter une action
    */
-  executeAction(gameId: string, playerId: PlayerId, action: GameAction): GameState {
-    const game = this.getGame(gameId);
+  async executeAction(gameId: string, playerId: PlayerId, action: GameAction): Promise<GameState> {
+    const gameBefore = await this.persistenceService.getCurrentGameState(gameId);
+    this.ensureBoardIsArray(gameBefore);
     
-    if (game.phase !== 'playing') {
+    if (gameBefore.phase !== 'playing') {
       throw new BadRequestException('La partie n\'est pas en cours');
     }
 
-    if (game.currentPlayer !== playerId) {
+    if (gameBefore.currentPlayer !== playerId) {
       throw new BadRequestException('Ce n\'est pas votre tour');
     }
 
-    const player = game.players[playerId];
+    const player = gameBefore.players[playerId];
 
     if (action.type === 'endTurn') {
-      return this.endTurn(game);
+      const gameAfter = this.endTurn(gameBefore);
+      // Enregistrer l'action dans l'historique
+      await this.persistenceService.recordAction(gameId, playerId, action, gameBefore, gameAfter);
+      return gameAfter;
     }
 
     // Vérifier qu'il reste des points d'action
@@ -278,19 +476,19 @@ export class GameBoardService {
 
     switch (action.type) {
       case 'move':
-        this.executeMove(game, action);
+        this.executeMove(gameBefore, action);
         break;
       case 'attack':
-        this.executeAttack(game, action);
+        this.executeAttack(gameBefore, action);
         break;
       case 'deployFromReinforcements':
-        this.executeDeployFromReinforcements(game, action);
+        this.executeDeployFromReinforcements(gameBefore, action);
         break;
       case 'addToReinforcements':
-        this.executeAddToReinforcements(game, action);
+        this.executeAddToReinforcements(gameBefore, action);
         break;
       case 'useAbility':
-        this.executeUseAbility(game, action);
+        this.executeUseAbility(gameBefore, action);
         break;
       default:
         throw new BadRequestException('Type d\'action inconnu');
@@ -298,13 +496,17 @@ export class GameBoardService {
 
     // Consommer un point d'action
     player.actionPoints--;
-    game.actionsThisTurn++;
+    gameBefore.actionsThisTurn++;
 
     // Vérifier la condition de victoire
-    this.checkVictory(game);
+    this.checkVictory(gameBefore);
 
-    this.games.set(gameId, game);
-    return game;
+    const gameAfter = gameBefore;
+
+    // Enregistrer l'action dans l'historique
+    await this.persistenceService.recordAction(gameId, playerId, action, gameBefore, gameAfter);
+
+    return gameAfter;
   }
 
   /**
@@ -510,15 +712,17 @@ export class GameBoardService {
    * Terminer le tour
    */
   private endTurn(game: GameState): GameState {
+    const updatedGame = { ...game };
+    
     // Changer de joueur
-    game.currentPlayer = game.currentPlayer === 'player1' ? 'player2' : 'player1';
-    game.turnNumber++;
-    game.actionsThisTurn = 0;
+    updatedGame.currentPlayer = updatedGame.currentPlayer === 'player1' ? 'player2' : 'player1';
+    updatedGame.turnNumber++;
+    updatedGame.actionsThisTurn = 0;
 
     // Recalculer les points d'action
-    this.calculateActionPoints(game);
+    this.calculateActionPoints(updatedGame);
 
-    return game;
+    return updatedGame;
   }
 
   /**

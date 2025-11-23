@@ -48,6 +48,7 @@ function BoardCell({ piece, position, isHighlighted, isDeploymentRow, isFrontier
     <Paper
       shadow="xs"
       p="xs"
+      radius={0}
       style={{
         width: 60,
         height: 60,
@@ -123,7 +124,7 @@ export function GameBoard({ board, selectedPosition, validMoves = [], onCellClic
   };
 
   return (
-    <Stack gap="xs">
+    <Stack gap="xs" style={{ position: 'relative' }}>
       {/* Plateau avec coordonnées */}
       <Group gap="xs" wrap="nowrap">
         {/* Espace vide en haut à gauche */}
@@ -132,7 +133,7 @@ export function GameBoard({ board, selectedPosition, validMoves = [], onCellClic
         {/* Légende des colonnes - alignée avec les cases */}
         <Group gap={0}>
           {['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].map((col) => (
-            <Box key={col} style={{ width: 60, textAlign: 'center' }}>
+            <Box key={col} style={{ width: 60, textAlign: 'center', marginLeft: col === 'H' ? 10 : 0 }}>
               <Text size="sm" fw={700} c={col === 'H' ? 'violet' : undefined}>
                 {col}
               </Text>
@@ -155,22 +156,61 @@ export function GameBoard({ board, selectedPosition, validMoves = [], onCellClic
         </Stack>
 
         {/* Cases du plateau */}
-        <Stack gap={0}>
+        <Stack gap={0} style={{ position: 'relative' }}>
           {board.map((row, rowIndex) => (
-            <Group key={rowIndex} gap={0}>
+            <Group key={rowIndex} gap={0} style={{ position: 'relative' }}>
               {row.map((piece, colIndex) => {
                 const position: Position = { row: rowIndex, col: colIndex };
+                // Ajouter un espace après la colonne G (index 6)
+                const marginLeft = colIndex === 7 ? 10 : 0;
                 return (
-                  <BoardCell
-                    key={`${rowIndex}-${colIndex}`}
-                    piece={piece}
-                    position={position}
-                    isHighlighted={isSelected(position) || isValidMove(position)}
-                    isDeploymentRow={rowIndex === 0 || rowIndex === 7}
-                    isFrontierRow={rowIndex === 3 || rowIndex === 4}
-                    isReinforcementColumn={colIndex === 7}
-                    onClick={() => onCellClick?.(position)}
-                  />
+                  <div key={`${rowIndex}-${colIndex}`} style={{ marginLeft, position: 'relative' }}>
+                    <BoardCell
+                      piece={piece}
+                      position={position}
+                      isHighlighted={isSelected(position) || isValidMove(position)}
+                      isDeploymentRow={rowIndex === 0 || rowIndex === 7}
+                      isFrontierRow={rowIndex === 3 || rowIndex === 4}
+                      isReinforcementColumn={colIndex === 7}
+                      onClick={() => onCellClick?.(position)}
+                    />
+                    
+                    {/* Flèche de déploiement H8 → G8 (row 0, col 7 → col 6) */}
+                    {rowIndex === 0 && colIndex === 7 && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          left: '-40px',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          fontSize: '24px',
+                          color: '#9370db',
+                          fontWeight: 'bold',
+                          zIndex: 10,
+                        }}
+                      >
+                        ←
+                      </div>
+                    )}
+                    
+                    {/* Flèche de déploiement H1 → G1 (row 7, col 7 → col 6) */}
+                    {rowIndex === 7 && colIndex === 7 && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          left: '-40px',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          fontSize: '24px',
+                          color: '#9370db',
+                          fontWeight: 'bold',
+                          zIndex: 10,
+                        }}
+                      >
+                        ←
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </Group>
