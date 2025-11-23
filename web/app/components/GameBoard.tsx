@@ -1,6 +1,7 @@
 'use client';
 
 import { Box, Group, Paper, Stack, Text, ThemeIcon } from '@mantine/core';
+import { IconStar, IconCircle, IconSword, IconArrowBigRightLines } from '@tabler/icons-react';
 import { BoardPiece, Position } from '../../lib/gameTypes';
 
 interface BoardCellProps {
@@ -30,13 +31,13 @@ function BoardCell({ piece, position, isHighlighted, isDeploymentRow, isFrontier
     bgColor = '#90ee90';
   }
 
-  const getPieceSymbol = (pieceType: string): string => {
+  const getPieceIcon = (pieceType: string) => {
     switch (pieceType) {
-      case 'general': return '★';
-      case 'colonel': return '◆';
-      case 'infantryman': return '●';
-      case 'scout': return '►';
-      default: return '?';
+      case 'general': return IconStar;
+      case 'colonel': return IconCircle;
+      case 'infantryman': return IconSword;
+      case 'scout': return IconArrowBigRightLines;
+      default: return null;
     }
   };
 
@@ -70,9 +71,10 @@ function BoardCell({ piece, position, isHighlighted, isDeploymentRow, isFrontier
             color={getPieceColor(piece.owner)}
             variant="filled"
           >
-            <Text size="xl" fw={700}>
-              {getPieceSymbol(piece.pieceType)}
-            </Text>
+            {(() => {
+              const Icon = getPieceIcon(piece.pieceType);
+              return Icon ? <Icon size={24} /> : <Text size="sm">?</Text>;
+            })()}
           </ThemeIcon>
         ) : (
           <ThemeIcon
