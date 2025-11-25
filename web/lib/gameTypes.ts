@@ -42,7 +42,14 @@ export interface Player {
   hasDeployedThisTurn: boolean;
 }
 
-export type GamePhase = 'deck-selection' | 'setup' | 'playing' | 'finished';
+export type GamePhase = 'deck-selection' | 'setup' | 'playing' | 'post-turn' | 'finished';
+
+// Deck pré-enregistré
+export interface PresetDeck {
+  name: string;
+  description: string;
+  pieces: PieceId[];
+}
 
 export interface GameState {
   id: string;
@@ -61,7 +68,8 @@ export type ActionType =
   | 'useAbility'
   | 'deployFromReinforcements'
   | 'addToReinforcements'
-  | 'endTurn';
+  | 'endTurn'
+  | 'skipPostTurnReinforcement';
 
 export interface GameAction {
   type: ActionType;

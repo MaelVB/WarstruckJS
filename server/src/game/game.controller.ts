@@ -104,6 +104,20 @@ export class GameController {
     );
   }
 
+  @Post(':gameId/complete-post-turn')
+  async completePostTurn(
+    @Param('gameId') gameId: string,
+    @Body() body: { playerId: PlayerId; addReinforcement: boolean; reservePieceId?: string },
+  ): Promise<GameState> {
+    this.logger.log(`Completing post-turn for game: ${gameId}`);
+    return await this.gameBoardService.completePostTurn(
+      gameId,
+      body.playerId,
+      body.addReinforcement,
+      body.reservePieceId,
+    );
+  }
+
   @Get('list')
   async listGames(): Promise<GameMetadata[]> {
     this.logger.log('Listing all games');

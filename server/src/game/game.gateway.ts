@@ -291,6 +291,26 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
+  @SubscribeMessage('complete-post-turn')
+  async handleCompletePostTurn(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { gameId: string; playerId: PlayerId; addReinforcement: boolean; reservePieceId?: string },
+  ) {
+    try {
+      const gameState = await this.gameBoardService.completePostTurn(
+        data.gameId,
+        data.playerId,
+        data.addReinforcement,
+        data.reservePieceId,
+      );
+
+      this.server.to(data.gameId).emit('game-updated', gameState);
+      this.server.to(data.gameId).emit('phase-changed', { phase: gameState.phase });
+    } catch (error: any) {
+      client.emit('error', { message: error.message });
+    }
+  }
+
   @SubscribeMessage('send-message')
   handleSendMessage(
     @ConnectedSocket() client: Socket,

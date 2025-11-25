@@ -224,8 +224,11 @@ export default function GameIdPage() {
 
     // Si une pièce est sélectionnée et on clique sur une case valide
     if (selectedPiece && validMoves.some(m => m.row === position.row && m.col === position.col)) {
+      // Vérifier si c'est un déploiement depuis la colonne des renforts (H1/H8)
+      const isDeployment = selectedPosition && selectedPosition.col === 7;
+      
       const action = {
-        type: 'move',
+        type: isDeployment ? 'deployFromReinforcements' : 'move',
         pieceId: selectedPiece.id,
         from: selectedPosition,
         to: position,
@@ -237,6 +240,40 @@ export default function GameIdPage() {
 
     // Sélectionner une pièce du joueur actuel
     if (clickedPiece && clickedPiece.owner === gameState.currentPlayer) {
+      // Gestion spéciale pour la colonne des renforts (colonne H = col 7)
+      if (position.col === 7) {
+        // ✅ PERMETTRE la sélection de la pièce déployable (H1 pour player1, H8 pour player2)
+        const isDeployablePosition = (gameState.currentPlayer === 'player1' && position.row === 7) ||
+                                      (gameState.currentPlayer === 'player2' && position.row === 0);
+        
+        if (isDeployablePosition) {
+          // La pièce en H1/H8 peut être déployée sur n'importe quelle case vide de sa ligne
+          setSelectedPiece(clickedPiece);
+          setSelectedPosition(position);
+          setError(null);
+          
+          const possibleMoves: Position[] = [];
+          const deploymentRow = position.row; // Même ligne (1 ou 8)
+          
+          // Parcourir toutes les colonnes de la ligne de déploiement (sauf H)
+          for (let col = 0; col < 7; col++) {
+            const targetPiece = gameState.board[deploymentRow][col];
+            if (!targetPiece) {
+              possibleMoves.push({ row: deploymentRow, col });
+            }
+          }
+          
+          setValidMoves(possibleMoves);
+        } else {
+          // ❌ Les autres pièces de renfort ne sont pas sélectionnables (pas de message d'erreur)
+          setSelectedPiece(null);
+          setSelectedPosition(null);
+          setValidMoves([]);
+        }
+        return;
+      }
+      
+      // Pièce normale sur le plateau (pas en colonne H)
       setSelectedPiece(clickedPiece);
       setSelectedPosition(position);
       setError(null);
@@ -414,6 +451,96 @@ export default function GameIdPage() {
           </>
         )}
 
+        {gameState.phase === 'post-turn' && (
+          <>
+            <Alert color="orange" title="Phase post-tour">
+              Les renforts ont été déplacés. Vous pouvez maintenant ajouter une pièce de votre réserve dans la colonne des renforts (en H{gameState.currentPlayer === 'player1' ? '4' : '5'}) ou passer.
+            </Alert>
+
+            <Group align="flex-start" gap="lg" justify="center" wrap="nowrap">
+              <div style={{ flex: '0 0 300px' }}>
+                <PlayerInfo
+                  player={gameState.players[gameState.currentPlayer]}
+                  playerId={gameState.currentPlayer}
+                  isCurrentPlayer={true}
+                />
+              </div>
+
+              <div style={{ flex: '0 0 auto' }}>
+                <GameBoard
+                  board={gameState.board}
+                />
+              </div>
+
+              <div style={{ flex: '0 0 300px' }}>
+                <ReserveZone
+                  pieces={gameState.players[gameState.currentPlayer].deck.filter(p => p.pieceType !== 'general')}
+                  playerId={gameState.currentPlayer}
+                  onPieceClick={async (piece) => {
+                    try {
+                      const response = await fetch(`${API_URL}/game/${gameId}/complete-post-turn`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          playerId: gameState.currentPlayer,
+                          addReinforcement: true,
+                          reservePieceId: piece.id,
+                        }),
+                      });
+
+                      if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.message || 'Erreur lors de l\'ajout du renfort');
+                      }
+
+                      const updatedGame = await response.json();
+                      setGameState(updatedGame);
+                      setError(null);
+                    } catch (err: any) {
+                      console.error('Error adding reinforcement:', err);
+                      setError(err.message);
+                    }
+                  }}
+                  selectedPieceId={undefined}
+                />
+              </div>
+            </Group>
+
+            <Group justify="center" gap="md">
+              <Button
+                onClick={async () => {
+                  try {
+                    const response = await fetch(`${API_URL}/game/${gameId}/complete-post-turn`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        playerId: gameState.currentPlayer,
+                        addReinforcement: false,
+                      }),
+                    });
+
+                    if (!response.ok) {
+                      const errorData = await response.json();
+                      throw new Error(errorData.message || 'Erreur');
+                    }
+
+                    const updatedGame = await response.json();
+                    setGameState(updatedGame);
+                    setError(null);
+                  } catch (err: any) {
+                    console.error('Error skipping reinforcement:', err);
+                    setError(err.message);
+                  }
+                }}
+                size="lg"
+                color="orange"
+              >
+                Passer sans ajouter de renfort
+              </Button>
+            </Group>
+          </>
+        )}
+
         {gameState.phase === 'playing' && (
           <>
             <Group align="flex-start" gap="lg" justify="center" wrap="nowrap">
@@ -441,7 +568,7 @@ export default function GameIdPage() {
                   onPieceClick={(piece) => {
                     console.log('Reserve piece clicked:', piece);
                   }}
-                  selectedPieceId={null}
+                  selectedPieceId={undefined}
                 />
               </div>
             </Group>

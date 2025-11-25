@@ -414,14 +414,22 @@ export class GameBoardService {
       let row: number;
       
       if (playerId === 'player1') {
-        // Joueur 1 (ligne 1): H4=row 4, H3=row 5, H2=row 6, H1=row 7
-        row = 4 + index;
+        // Joueur 1 (ligne 1): 
+        // queuePosition 0 → H1 (row 7) - déployable
+        // queuePosition 1 → H2 (row 6)
+        // queuePosition 2 → H3 (row 5)
+        // queuePosition 3 → H4 (row 4)
+        row = 7 - index;
       } else {
-        // Joueur 2 (ligne 8): H5=row 3, H6=row 2, H7=row 1, H8=row 0
-        row = 3 - index;
+        // Joueur 2 (ligne 8):
+        // queuePosition 0 → H8 (row 0) - déployable
+        // queuePosition 1 → H7 (row 1)
+        // queuePosition 2 → H6 (row 2)
+        // queuePosition 3 → H5 (row 3)
+        row = index;
       }
 
-      this.logger.debug(`Attempting to place ${reinf.pieceType} at [${row}, ${col}]. Board[${row}] exists: ${!!game.board[row]}`);
+      this.logger.debug(`Attempting to place ${reinf.pieceType} (queuePos ${reinf.queuePosition}) at [${row}, ${col}]. Board[${row}] exists: ${!!game.board[row]}`);
 
       // Vérifier que la ligne existe
       if (!game.board[row]) {
@@ -490,6 +498,8 @@ export class GameBoardService {
       case 'useAbility':
         this.executeUseAbility(gameBefore, action);
         break;
+      case 'skipPostTurnReinforcement':
+        throw new BadRequestException('Utilisez la méthode completePostTurn pour gérer la phase post-turn');
       default:
         throw new BadRequestException('Type d\'action inconnu');
     }
@@ -529,6 +539,20 @@ export class GameBoardService {
     // Vérifier que la destination est valide (dans les limites du plateau)
     if (!this.isValidPosition(action.to)) {
       throw new BadRequestException('Position de destination invalide');
+    }
+
+    // Vérifier si la pièce est dans la colonne des renforts (colonne H = col 7)
+    // Les pièces dans cette colonne NE PEUVENT PAS être déplacées manuellement
+    // Elles avancent automatiquement pendant la phase post-turn
+    // Le déploiement depuis H8/H1 doit utiliser l'action 'deployFromReinforcements', pas 'move'
+    if (piece.position.col === 7) {
+      const pieceRowDisplay = 8 - piece.position.row; // Conversion row → numéro de ligne affichée
+      throw new BadRequestException(
+        `Les pièces dans la colonne des renforts ne peuvent pas être déplacées manuellement. ` +
+        `Votre pièce est en H${pieceRowDisplay}. ` +
+        `Les renforts avancent automatiquement pendant la phase post-turn. ` +
+        `Pour déployer une pièce depuis H1 ou H8, utilisez l'action de déploiement (pas un déplacement).`
+      );
     }
 
     // TODO: Valider que le déplacement est dans la zone de mouvement de la pièce
@@ -592,18 +616,28 @@ export class GameBoardService {
     const reinforcementPiece = player.reinforcements.find(p => p.id === action.pieceId);
 
     if (!reinforcementPiece) {
-      throw new BadRequestException('Pièce de renfort introuvable');
+      this.logger.debug(`Pièce ${action.pieceId} non trouvée dans reinforcements. IDs disponibles: ${player.reinforcements.map(r => r.id).join(', ')}`);
+      throw new BadRequestException(`Pièce de renfort introuvable. ID recherché: ${action.pieceId}`);
     }
 
     // Vérifier que la pièce est en position 0 (prête à être déployée)
     if (reinforcementPiece.queuePosition !== 0) {
-      throw new BadRequestException('Seule la pièce en première position peut être déployée');
+      this.logger.debug(`Pièce ${action.pieceId} a queuePosition=${reinforcementPiece.queuePosition}, attendu: 0`);
+      throw new BadRequestException(`Seule la pièce en première position peut être déployée (position actuelle: ${reinforcementPiece.queuePosition})`);
     }
 
     // Vérifier que la destination est sur la ligne de déploiement
-    const deploymentRow = game.currentPlayer === 'player1' ? 0 : 7;
+    // Player1 déploie sur la ligne 1 (row 7)
+    // Player2 déploie sur la ligne 8 (row 0)
+    const deploymentRow = game.currentPlayer === 'player1' ? 7 : 0;
+    const deploymentLine = game.currentPlayer === 'player1' ? 1 : 8;
     if (action.to.row !== deploymentRow) {
-      throw new BadRequestException('Vous devez déployer sur votre ligne de déploiement');
+      throw new BadRequestException(`Vous devez déployer sur votre ligne de déploiement (ligne ${deploymentLine})`);
+    }
+
+    // Vérifier que la destination n'est pas dans la colonne des renforts (col 7 = colonne H)
+    if (action.to.col === 7) {
+      throw new BadRequestException('Vous ne pouvez pas déployer dans la colonne des renforts');
     }
 
     // Vérifier qu'il n'y a pas de pièce adverse sur la ligne de déploiement (bloquage)
@@ -617,6 +651,17 @@ export class GameBoardService {
       throw new BadRequestException('La case de destination est occupée');
     }
 
+    // Trouver et effacer la pièce de la colonne H sur le plateau
+    const col = 7; // Colonne H
+    for (let row = 0; row < 8; row++) {
+      const piece = game.board[row][col];
+      if (piece && piece.id === action.pieceId) {
+        game.board[row][col] = null; // Effacer l'ancienne position
+        this.logger.debug(`Pièce ${action.pieceId} effacée de sa position en colonne H [${row}, ${col}]`);
+        break;
+      }
+    }
+
     // Retirer la pièce des renforts
     player.reinforcements = player.reinforcements.filter(p => p.id !== action.pieceId);
 
@@ -628,7 +673,7 @@ export class GameBoardService {
       }
     });
 
-    // Placer la pièce sur le plateau
+    // Placer la pièce sur le plateau à sa nouvelle position
     const newPiece: BoardPiece = {
       id: reinforcementPiece.id,
       pieceType: reinforcementPiece.pieceType,
@@ -639,6 +684,7 @@ export class GameBoardService {
     };
 
     game.board[action.to.row][action.to.col] = newPiece;
+    this.logger.debug(`Pièce ${action.pieceId} déployée en [${action.to.row}, ${action.to.col}]`);
   }
 
   /**
@@ -709,20 +755,145 @@ export class GameBoardService {
   }
 
   /**
-   * Terminer le tour
+   * Terminer le tour - passe en phase post-turn
    */
   private endTurn(game: GameState): GameState {
     const updatedGame = { ...game };
     
-    // Changer de joueur
-    updatedGame.currentPlayer = updatedGame.currentPlayer === 'player1' ? 'player2' : 'player1';
-    updatedGame.turnNumber++;
-    updatedGame.actionsThisTurn = 0;
-
-    // Recalculer les points d'action
-    this.calculateActionPoints(updatedGame);
+    // Passer en phase post-turn pour déplacer les renforts et permettre l'ajout
+    updatedGame.phase = 'post-turn';
+    
+    // Déplacer tous les renforts d'une case vers le bord du plateau
+    this.moveReinforcementsTowardBoard(updatedGame, updatedGame.currentPlayer);
 
     return updatedGame;
+  }
+
+  /**
+   * Déplacer les renforts d'une case vers le bord du plateau
+   */
+  private moveReinforcementsTowardBoard(game: GameState, playerId: PlayerId): void {
+    const col = 7; // Colonne H
+    
+    // Identifier les pièces dans la colonne H pour ce joueur
+    const reinforcementPieces: BoardPiece[] = [];
+    
+    for (let row = 0; row < 8; row++) {
+      const piece = game.board[row][col];
+      if (piece && piece.owner === playerId) {
+        reinforcementPieces.push(piece);
+      }
+    }
+    
+    // Trier les pièces par row (ordre de déplacement)
+    // IMPORTANT : Déplacer en commençant par la pièce la PLUS PROCHE du bord
+    // pour éviter les collisions (la case de destination doit être libre)
+    if (playerId === 'player1') {
+      // Joueur 1: déplacer vers le haut (row 7 → row 6 → ... → row 0)
+      // Déplacer d'abord les pièces avec row le PLUS PETIT (déjà près du bord)
+      // Ex: row 4 avant row 5, sinon row 5→4 bloquerait row 4→3
+      reinforcementPieces.sort((a, b) => a.position.row - b.position.row);
+    } else {
+      // Joueur 2: déplacer vers le bas (row 0 → row 1 → ... → row 7)
+      // Déplacer d'abord les pièces avec row le PLUS GRAND (déjà près du bord)
+      // Ex: row 3 avant row 2, sinon row 2→3 bloquerait row 3→4
+      reinforcementPieces.sort((a, b) => b.position.row - a.position.row);
+    }
+    
+    // Déplacer chaque pièce d'une case vers le bord (dans l'ordre trié)
+    reinforcementPieces.forEach(piece => {
+      const currentRow = piece.position.row;
+      const newRow = playerId === 'player1' ? currentRow - 1 : currentRow + 1;
+      
+      // Vérifier que la nouvelle position est valide et libre
+      if (newRow >= 0 && newRow < 8 && !game.board[newRow][col]) {
+        // Effacer l'ancienne position
+        game.board[currentRow][col] = null;
+        
+        // Nouvelle position
+        piece.position = { row: newRow, col };
+        game.board[newRow][col] = piece;
+        
+        this.logger.debug(`Renfort déplacé de [${currentRow}, ${col}] vers [${newRow}, ${col}]`);
+      }
+    });
+  }
+
+  /**
+   * Compléter la phase post-turn (avec ou sans ajout de renfort)
+   */
+  async completePostTurn(gameId: string, playerId: PlayerId, addReinforcement: boolean, reservePieceId?: string): Promise<GameState> {
+    const game = await this.persistenceService.getCurrentGameState(gameId);
+    this.ensureBoardIsArray(game);
+    
+    if (game.phase !== 'post-turn') {
+      throw new BadRequestException('Aucune phase post-turn en cours');
+    }
+
+    if (game.currentPlayer !== playerId) {
+      throw new BadRequestException('Ce n\'est pas votre tour');
+    }
+
+    // Si le joueur veut ajouter un renfort
+    if (addReinforcement && reservePieceId) {
+      const player = game.players[playerId];
+      const reservePiece = player.deck.find(p => p.id === reservePieceId);
+
+      if (!reservePiece) {
+        throw new BadRequestException('Pièce de réserve introuvable');
+      }
+
+      // Déterminer la position d'ajout
+      // Player1: H4 (row 4) = queuePosition la plus éloignée
+      // Player2: H5 (row 3) = queuePosition la plus éloignée
+      const targetRow = playerId === 'player1' ? 4 : 3;
+      const targetCol = 7; // Colonne H
+
+      // Vérifier que la case est libre
+      if (game.board[targetRow][targetCol]) {
+        throw new BadRequestException('La position d\'ajout de renfort est occupée');
+      }
+
+      // Retirer de la réserve
+      player.deck = player.deck.filter(p => p.id !== reservePieceId);
+
+      // Ajouter aux renforts avec la queuePosition la plus élevée
+      const newQueuePosition = player.reinforcements.length; // 0, 1, 2, 3, ou 4
+      const newReinforcementPiece: ReinforcementPiece = {
+        id: reservePiece.id,
+        pieceType: reservePiece.pieceType,
+        owner: playerId,
+        faceUp: false, // Face cachée
+        queuePosition: newQueuePosition,
+      };
+      player.reinforcements.push(newReinforcementPiece);
+
+      // Placer sur le plateau dans la colonne des renforts
+      const newBoardPiece: BoardPiece = {
+        id: reservePiece.id,
+        pieceType: reservePiece.pieceType,
+        owner: playerId,
+        position: { row: targetRow, col: targetCol },
+        faceUp: false, // Face cachée dans les renforts
+        usedAbilities: this.initializeAbilities(reservePiece.pieceType),
+      };
+
+      game.board[targetRow][targetCol] = newBoardPiece;
+    }
+
+    // Passer au tour suivant
+    game.phase = 'playing';
+    game.currentPlayer = game.currentPlayer === 'player1' ? 'player2' : 'player1';
+    game.turnNumber++;
+    game.actionsThisTurn = 0;
+
+    // Recalculer les points d'action
+    this.calculateActionPoints(game);
+
+    // Mettre à jour la partie persistée
+    await this.persistenceService.updateGameState(gameId, game);
+
+    return game;
   }
 
   /**
@@ -752,9 +923,12 @@ export class GameBoardService {
    * Vérifier si une pièce adverse est sur la ligne de déploiement
    */
   private hasEnemyOnDeploymentLine(game: GameState, playerId: PlayerId): boolean {
-    const deploymentRow = playerId === 'player1' ? 0 : 7;
+    // Player1 déploie sur la ligne 1 (row 7)
+    // Player2 déploie sur la ligne 8 (row 0)
+    const deploymentRow = playerId === 'player1' ? 7 : 0;
     
-    for (let col = 0; col < 8; col++) {
+    // Vérifier uniquement les colonnes A-G (0-6), pas la colonne H (7) qui contient les renforts du joueur
+    for (let col = 0; col < 7; col++) {
       const piece = game.board[deploymentRow][col];
       if (piece && piece.owner !== playerId) {
         return true;

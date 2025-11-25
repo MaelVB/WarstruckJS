@@ -81,6 +81,7 @@ export type GamePhase =
   | 'deck-selection' // Sélection des 20 pièces par chaque joueur
   | 'setup' // Placement du général et choix des 4 pièces de renforts
   | 'playing' // Partie en cours
+  | 'post-turn' // Phase après le tour (déplacement des renforts et ajout optionnel)
   | 'finished'; // Partie terminée
 
 export interface GameState {
@@ -100,7 +101,8 @@ export type ActionType =
   | 'useAbility' // Utiliser un effet
   | 'deployFromReinforcements' // Placer une pièce des renforts sur le plateau
   | 'addToReinforcements' // Ajouter une pièce de la réserve aux renforts
-  | 'endTurn'; // Terminer le tour
+  | 'endTurn' // Terminer le tour
+  | 'skipPostTurnReinforcement'; // Passer l'ajout de renfort en phase post-turn
 
 export interface GameAction {
   type: ActionType;

@@ -2,7 +2,16 @@
 
 Jeu de plateau tactique Warstruck implémenté avec **NestJS** (serveur) et **Next.js** (client web). Ce prototype inclut un plateau de jeu interactif 8x8 avec système de tours, gestion des pièces, et mécaniques de jeu complètes.
 
-> ✨ **Nouveau** : Gestion complète des parties avec UUID, **persistance MongoDB**, historique et système de replay ! Voir [CHANGELOG.md](./CHANGELOG.md) pour les détails.
+> ✨ **Nouveau** : Gestion complète des parties avec UUID, **persistance MongoDB**, historique et système de replay !
+
+> 🎯 **Dernières Modifications (v1.1.0)** : 
+> - **Decks pré-enregistrés** avec deck par défaut (2 Colonels, 10 Fantassins, 7 Éclaireurs)
+> - **Restrictions de déplacement** dans la colonne des renforts (seules H8/H1 déployables)
+> - **Phase post-turn** avec déplacement automatique des renforts et ajout optionnel
+> 
+> 📖 Voir **[docs/modifications-v1.1.0/](./docs/modifications-v1.1.0/)** pour la documentation complète.
+> 
+> 📚 **Documentation Organisée** : Tous les guides sont maintenant dans **[docs/](./docs/)** - Consultez **[docs/README.md](./docs/README.md)** pour l'index complet.
 
 ## 🎮 Fonctionnalités Principales
 
@@ -169,19 +178,35 @@ pnpm build
 
 ## 📚 Documentation
 
-| Fichier | Description |
-|---------|-------------|
-| [QUICKSTART.md](./QUICKSTART.md) | Guide de démarrage rapide |
-| [USAGE_GUIDE.md](./USAGE_GUIDE.md) | **🆕** Guide utilisateur du système de parties |
-| [GAME_MANAGEMENT.md](./GAME_MANAGEMENT.md) | **🆕** Documentation technique du système de gestion |
-| [API_TESTING.md](./API_TESTING.md) | **🆕** Guide de test de l'API avec exemples |
-| [CHANGELOG.md](./CHANGELOG.md) | **🆕** Historique des changements |
-| [SUMMARY.md](./SUMMARY.md) | Résumé de la refactorisation |
-| [REFACTORING.md](./REFACTORING.md) | Détails de la refactorisation |
-| [PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md) | Structure complète du projet |
-| [IMPLEMENTATION.md](./IMPLEMENTATION.md) | Règles du jeu détaillées |
-| [server/README.md](./server/README.md) | Documentation backend |
-| [server/API_TESTS.md](./server/API_TESTS.md) | Tests API (ancien) |
+### 📖 Documentation Complète
+Toute la documentation est organisée dans le dossier **[docs/](./docs/)** :
+
+| Document | Description |
+|----------|-------------|
+| **[docs/README.md](./docs/README.md)** | 📚 **Index complet** de toute la documentation |
+| [QUICKSTART.md](./QUICKSTART.md) | 🚀 Guide de démarrage rapide |
+| [CHANGELOG.md](./CHANGELOG.md) | � Historique des changements |
+| [CHECKLIST.md](./CHECKLIST.md) | ✅ Checklist de développement |
+
+### 🎯 Modifications Récentes (v1.1.0)
+Les dernières modifications sont dans **[docs/modifications-v1.1.0/](./docs/modifications-v1.1.0/)** :
+
+- **[QUICK_START](./docs/modifications-v1.1.0/QUICK_START_MODIFICATIONS.md)** ⚡ - Résumé en 30 secondes
+- **[RÉCAPITULATIF](./docs/modifications-v1.1.0/RÉCAPITULATIF_FINAL.md)** - Vue d'ensemble complète
+- **[RÈGLES](./docs/modifications-v1.1.0/RÈGLES_MODIFICATIONS.md)** - Nouvelles règles du jeu
+- **[TESTS](./docs/modifications-v1.1.0/GUIDE_DE_TEST.md)** - Guide de test
+- **[DÉBOGAGE](./docs/modifications-v1.1.0/GUIDE_DÉBOGAGE.md)** - Aide au débogage
+
+### 📑 Documentation par Thème
+
+| Thème | Documents |
+|-------|-----------|
+| **Architecture** | [PROJECT_STRUCTURE](./docs/PROJECT_STRUCTURE.md), [SUMMARY](./docs/SUMMARY.md), [REFACTORING](./docs/REFACTORING.md) |
+| **Règles du Jeu** | [IMPLEMENTATION](./docs/IMPLEMENTATION.md), [RÈGLES_MODIFICATIONS](./docs/modifications-v1.1.0/RÈGLES_MODIFICATIONS.md) |
+| **API** | [API_TESTING](./docs/API_TESTING.md), [server/README.md](./server/README.md) |
+| **Parties** | [GAME_MANAGEMENT](./docs/GAME_MANAGEMENT.md), [USAGE_GUIDE](./docs/USAGE_GUIDE.md) |
+| **Multijoueur** | [REALTIME_1VS1](./docs/REALTIME_1VS1.md), [QUICKSTART_1VS1](./docs/QUICKSTART_1VS1.md) |
+| **Base de Données** | [MONGODB_QUICKSTART](./docs/MONGODB_QUICKSTART.md), [MONGODB_MIGRATION](./docs/MONGODB_MIGRATION.md) |
 
 ## 📝 Contribuer
 

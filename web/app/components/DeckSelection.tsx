@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Card, Stack, Title, Text, Group, Button, Badge, Alert, Grid } from '@mantine/core';
-import { PieceId } from '../../lib/gameTypes';
+import { Card, Stack, Title, Text, Group, Button, Badge, Alert, Grid, Divider } from '@mantine/core';
+import { PieceId, PresetDeck } from '../../lib/gameTypes';
 
 interface DeckSelectionProps {
   playerId: 'player1' | 'player2';
@@ -38,15 +38,71 @@ const availablePieces: PieceOption[] = [
   },
 ];
 
+// Decks pré-enregistrés
+const presetDecks: PresetDeck[] = [
+  {
+    name: 'Deck Équilibré (Par défaut)',
+    description: '2 Colonels, 10 Fantassins, 7 Éclaireurs',
+    pieces: [
+      'colonel', 'colonel',
+      ...Array(10).fill('infantryman'),
+      ...Array(7).fill('scout'),
+    ] as PieceId[],
+  },
+  {
+    name: 'Deck Commandement',
+    description: '4 Colonels, 8 Fantassins, 7 Éclaireurs',
+    pieces: [
+      ...Array(4).fill('colonel'),
+      ...Array(8).fill('infantryman'),
+      ...Array(7).fill('scout'),
+    ] as PieceId[],
+  },
+  {
+    name: 'Deck Assaut',
+    description: '2 Colonels, 15 Fantassins, 2 Éclaireurs',
+    pieces: [
+      'colonel', 'colonel',
+      ...Array(15).fill('infantryman'),
+      'scout', 'scout',
+    ] as PieceId[],
+  },
+  {
+    name: 'Deck Mobilité',
+    description: '2 Colonels, 4 Fantassins, 13 Éclaireurs',
+    pieces: [
+      'colonel', 'colonel',
+      ...Array(4).fill('infantryman'),
+      ...Array(13).fill('scout'),
+    ] as PieceId[],
+  },
+];
+
 export function DeckSelection({ playerId, onDeckSelected, disabled = false }: DeckSelectionProps) {
   const [selectedPieces, setSelectedPieces] = useState<{ [key in PieceId]?: number }>({
-    colonel: 0,
-    infantryman: 0,
-    scout: 0,
+    colonel: 2,
+    infantryman: 10,
+    scout: 7,
   });
 
   const totalSelected = Object.values(selectedPieces).reduce((sum, count) => sum + (count || 0), 0);
   const remainingSlots = 19 - totalSelected;
+
+  const loadPresetDeck = (preset: PresetDeck) => {
+    if (disabled) return;
+    
+    const counts: { [key in PieceId]?: number } = {
+      colonel: 0,
+      infantryman: 0,
+      scout: 0,
+    };
+    
+    preset.pieces.forEach(pieceType => {
+      counts[pieceType] = (counts[pieceType] || 0) + 1;
+    });
+    
+    setSelectedPieces(counts);
+  };
 
   const incrementPiece = (pieceId: PieceId) => {
     if (totalSelected < 19 && !disabled) {
@@ -90,6 +146,32 @@ export function DeckSelection({ playerId, onDeckSelected, disabled = false }: De
           Choisissez 19 pièces parmi les Colonels, Fantassins et Éclaireurs. Le Général sera ajouté automatiquement.
         </Text>
       </div>
+
+      {/* Decks pré-enregistrés */}
+      <Card withBorder padding="lg">
+        <Stack gap="md">
+          <Text fw={600} size="lg">Decks pré-enregistrés</Text>
+          <Grid>
+            {presetDecks.map((preset, index) => (
+              <Grid.Col key={index} span={{ base: 12, sm: 6 }}>
+                <Card
+                  withBorder
+                  padding="md"
+                  style={{ cursor: disabled ? 'default' : 'pointer', height: '100%' }}
+                  onClick={() => loadPresetDeck(preset)}
+                >
+                  <Stack gap="xs">
+                    <Text fw={600}>{preset.name}</Text>
+                    <Text size="sm" c="dimmed">{preset.description}</Text>
+                  </Stack>
+                </Card>
+              </Grid.Col>
+            ))}
+          </Grid>
+        </Stack>
+      </Card>
+
+      <Divider label="OU personnalisez votre deck" labelPosition="center" />
 
       <Card withBorder padding="lg">
         <Group justify="space-between" mb="md">
