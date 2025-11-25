@@ -770,7 +770,9 @@ export class GameBoardService {
   }
 
   /**
-   * Déplacer les renforts d'une case vers le bord du plateau
+   * Déplacer les renforts d'une case vers la ligne de déploiement
+   * Player1: renforts en H4-H1, se déplacent vers H1 (row 7)
+   * Player2: renforts en H5-H8, se déplacent vers H8 (row 0)
    */
   private moveReinforcementsTowardBoard(game: GameState, playerId: PlayerId): void {
     const col = 7; // Colonne H
@@ -785,25 +787,29 @@ export class GameBoardService {
       }
     }
     
+    this.logger.debug(`Déplacement des renforts pour ${playerId}: ${reinforcementPieces.length} pièces trouvées`);
+    
     // Trier les pièces par row (ordre de déplacement)
-    // IMPORTANT : Déplacer en commençant par la pièce la PLUS PROCHE du bord
+    // IMPORTANT : Déplacer en commençant par la pièce la PLUS PROCHE de la ligne de déploiement
     // pour éviter les collisions (la case de destination doit être libre)
     if (playerId === 'player1') {
-      // Joueur 1: déplacer vers le haut (row 7 → row 6 → ... → row 0)
-      // Déplacer d'abord les pièces avec row le PLUS PETIT (déjà près du bord)
-      // Ex: row 4 avant row 5, sinon row 5→4 bloquerait row 4→3
-      reinforcementPieces.sort((a, b) => a.position.row - b.position.row);
-    } else {
-      // Joueur 2: déplacer vers le bas (row 0 → row 1 → ... → row 7)
-      // Déplacer d'abord les pièces avec row le PLUS GRAND (déjà près du bord)
-      // Ex: row 3 avant row 2, sinon row 2→3 bloquerait row 3→4
+      // Joueur 1: déplacer vers H1 (row 7)
+      // H4 (row 4) → H3 (row 5) → H2 (row 6) → H1 (row 7)
+      // Déplacer d'abord les pièces avec row le PLUS GRAND (déjà près de H1)
       reinforcementPieces.sort((a, b) => b.position.row - a.position.row);
+    } else {
+      // Joueur 2: déplacer vers H8 (row 0)
+      // H5 (row 3) → H6 (row 2) → H7 (row 1) → H8 (row 0)
+      // Déplacer d'abord les pièces avec row le PLUS PETIT (déjà près de H8)
+      reinforcementPieces.sort((a, b) => a.position.row - b.position.row);
     }
     
-    // Déplacer chaque pièce d'une case vers le bord (dans l'ordre trié)
+    // Déplacer chaque pièce d'une case vers la ligne de déploiement (dans l'ordre trié)
     reinforcementPieces.forEach(piece => {
       const currentRow = piece.position.row;
-      const newRow = playerId === 'player1' ? currentRow - 1 : currentRow + 1;
+      // Player1: avance vers row 7 (H1), donc row augmente
+      // Player2: avance vers row 0 (H8), donc row diminue
+      const newRow = playerId === 'player1' ? currentRow + 1 : currentRow - 1;
       
       // Vérifier que la nouvelle position est valide et libre
       if (newRow >= 0 && newRow < 8 && !game.board[newRow][col]) {
@@ -814,7 +820,9 @@ export class GameBoardService {
         piece.position = { row: newRow, col };
         game.board[newRow][col] = piece;
         
-        this.logger.debug(`Renfort déplacé de [${currentRow}, ${col}] vers [${newRow}, ${col}]`);
+        this.logger.debug(`Renfort déplacé de H${8 - currentRow} (row ${currentRow}) vers H${8 - newRow} (row ${newRow})`);
+      } else {
+        this.logger.debug(`Renfort en H${8 - currentRow} ne peut pas avancer (position ${newRow} invalide ou occupée)`);
       }
     });
   }

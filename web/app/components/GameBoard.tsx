@@ -11,10 +11,11 @@ interface BoardCellProps {
   isDeploymentRow?: boolean;
   isFrontierRow?: boolean;
   isReinforcementColumn?: boolean;
+  currentPlayerId?: string;
   onClick?: () => void;
 }
 
-function BoardCell({ piece, position, isHighlighted, isDeploymentRow, isFrontierRow, isReinforcementColumn, onClick }: BoardCellProps) {
+function BoardCell({ piece, position, isHighlighted, isDeploymentRow, isFrontierRow, isReinforcementColumn, currentPlayerId, onClick }: BoardCellProps) {
   // Couleur de la case (échiquier)
   const isLightSquare = (position.row + position.col) % 2 === 0;
   let bgColor = isLightSquare ? '#f0d9b5' : '#b58863';
@@ -45,6 +46,26 @@ function BoardCell({ piece, position, isHighlighted, isDeploymentRow, isFrontier
     return owner === 'player1' ? 'blue' : 'red';
   };
 
+  // Déterminer si la pièce doit être visible (révélée)
+  const shouldRevealPiece = (): boolean => {
+    if (!piece) return false;
+    
+    // Si c'est dans la colonne des renforts
+    if (isReinforcementColumn) {
+      // Toujours révéler mes propres pièces
+      if (piece.owner === currentPlayerId) {
+        return true;
+      }
+      
+      // Pour les pièces adverses, révéler uniquement celles en position de déploiement (H1 ou H8)
+      const isDeploymentPosition = position.row === 0 || position.row === 7;
+      return isDeploymentPosition;
+    }
+    
+    // Hors colonne des renforts, révéler selon faceUp
+    return piece.faceUp;
+  };
+
   return (
     <Paper
       shadow="xs"
@@ -64,7 +85,7 @@ function BoardCell({ piece, position, isHighlighted, isDeploymentRow, isFrontier
       onClick={onClick}
     >
       {piece ? (
-        piece.faceUp ? (
+        shouldRevealPiece() ? (
           <ThemeIcon
             size="xl"
             radius="xl"
@@ -109,10 +130,11 @@ interface GameBoardProps {
   board: (BoardPiece | null)[][];
   selectedPosition?: Position;
   validMoves?: Position[];
+  currentPlayerId?: string;
   onCellClick?: (position: Position) => void;
 }
 
-export function GameBoard({ board, selectedPosition, validMoves = [], onCellClick }: GameBoardProps) {
+export function GameBoard({ board, selectedPosition, validMoves = [], currentPlayerId, onCellClick }: GameBoardProps) {
   const isPositionEqual = (pos1: Position, pos2: Position) => {
     return pos1.row === pos2.row && pos1.col === pos2.col;
   };
@@ -174,18 +196,19 @@ export function GameBoard({ board, selectedPosition, validMoves = [], onCellClic
                       isDeploymentRow={rowIndex === 0 || rowIndex === 7}
                       isFrontierRow={rowIndex === 3 || rowIndex === 4}
                       isReinforcementColumn={colIndex === 7}
+                      currentPlayerId={currentPlayerId}
                       onClick={() => onCellClick?.(position)}
                     />
                     
-                    {/* Flèche de déploiement H8 → G8 (row 0, col 7 → col 6) */}
+                    {/* Flèche de déploiement H8 → G8 (row 0, col 7) */}
                     {rowIndex === 0 && colIndex === 7 && (
                       <div
                         style={{
                           position: 'absolute',
-                          left: '-40px',
+                          left: '-5px',
                           top: '50%',
-                          transform: 'translateY(-50%)',
-                          fontSize: '24px',
+                          transform: 'translateY(-50%) translateX(-50%)',
+                          fontSize: '32px',
                           color: '#9370db',
                           fontWeight: 'bold',
                           zIndex: 10,
@@ -195,15 +218,15 @@ export function GameBoard({ board, selectedPosition, validMoves = [], onCellClic
                       </div>
                     )}
                     
-                    {/* Flèche de déploiement H1 → G1 (row 7, col 7 → col 6) */}
+                    {/* Flèche de déploiement H1 → G1 (row 7, col 7) */}
                     {rowIndex === 7 && colIndex === 7 && (
                       <div
                         style={{
                           position: 'absolute',
-                          left: '-40px',
+                          left: '-5px',
                           top: '50%',
-                          transform: 'translateY(-50%)',
-                          fontSize: '24px',
+                          transform: 'translateY(-50%) translateX(-50%)',
+                          fontSize: '32px',
                           color: '#9370db',
                           fontWeight: 'bold',
                           zIndex: 10,

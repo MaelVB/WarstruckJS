@@ -2,13 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Container, Stack, Title, Group, Button, Text, Alert, Grid, LoadingOverlay } from '@mantine/core';
+import { Container, Stack, Title, Group, Button, Text, Alert, Grid, LoadingOverlay, Modal } from '@mantine/core';
 import { GameBoard } from '../../components/GameBoard';
 import { PlayerInfo } from '../../components/PlayerInfo';
 import { DeckSelection } from '../../components/DeckSelection';
 import { SetupReinforcements } from '../../components/SetupReinforcements';
 import { ReserveZone } from '../../components/ReserveZone';
-import { GameState, Position, BoardPiece, PlayerId, PieceId } from '../../../lib/gameTypes';
+import { GameState, Position, BoardPiece, PlayerId, PieceId, ReservePiece } from '../../../lib/gameTypes';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -58,6 +58,8 @@ export default function GameIdPage() {
   const [selectedPosition, setSelectedPosition] = useState<Position | null>(null);
   const [validMoves, setValidMoves] = useState<Position[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+  const [pieceToAdd, setPieceToAdd] = useState<ReservePiece | null>(null);
 
   // Charger la partie depuis le serveur
   useEffect(() => {
@@ -469,6 +471,7 @@ export default function GameIdPage() {
               <div style={{ flex: '0 0 auto' }}>
                 <GameBoard
                   board={gameState.board}
+                  currentPlayerId={gameState.currentPlayer}
                 />
               </div>
 
@@ -476,30 +479,9 @@ export default function GameIdPage() {
                 <ReserveZone
                   pieces={gameState.players[gameState.currentPlayer].deck.filter(p => p.pieceType !== 'general')}
                   playerId={gameState.currentPlayer}
-                  onPieceClick={async (piece) => {
-                    try {
-                      const response = await fetch(`${API_URL}/game/${gameId}/complete-post-turn`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          playerId: gameState.currentPlayer,
-                          addReinforcement: true,
-                          reservePieceId: piece.id,
-                        }),
-                      });
-
-                      if (!response.ok) {
-                        const errorData = await response.json();
-                        throw new Error(errorData.message || 'Erreur lors de l\'ajout du renfort');
-                      }
-
-                      const updatedGame = await response.json();
-                      setGameState(updatedGame);
-                      setError(null);
-                    } catch (err: any) {
-                      console.error('Error adding reinforcement:', err);
-                      setError(err.message);
-                    }
+                  onPieceClick={(piece) => {
+                    setPieceToAdd(piece);
+                    setConfirmModalOpen(true);
                   }}
                   selectedPieceId={undefined}
                 />
@@ -557,6 +539,7 @@ export default function GameIdPage() {
                   board={gameState.board}
                   selectedPosition={selectedPosition || undefined}
                   validMoves={validMoves}
+                  currentPlayerId={gameState.currentPlayer}
                   onCellClick={handleCellClick}
                 />
               </div>
@@ -601,6 +584,73 @@ export default function GameIdPage() {
             </Group>
           </Alert>
         )}
+
+        {/* Modale de confirmation pour l'ajout de renfort */}
+        <Modal
+          opened={confirmModalOpen}
+          onClose={() => {
+            setConfirmModalOpen(false);
+            setPieceToAdd(null);
+          }}
+          title="Ajouter un renfort"
+          centered
+        >
+          <Stack gap="md">
+            <Text>
+              Êtes-vous sûr de vouloir ajouter cette pièce ({pieceToAdd?.pieceType}) à la colonne des renforts ?
+            </Text>
+            <Text size="sm" c="dimmed">
+              La pièce sera placée en H{gameState?.currentPlayer === 'player1' ? '4' : '5'} et rejoindra la file des renforts.
+            </Text>
+            <Group justify="flex-end" gap="sm">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setConfirmModalOpen(false);
+                  setPieceToAdd(null);
+                }}
+              >
+                Annuler
+              </Button>
+              <Button
+                color="blue"
+                onClick={async () => {
+                  if (!pieceToAdd) return;
+                  
+                  try {
+                    const response = await fetch(`${API_URL}/game/${gameId}/complete-post-turn`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        playerId: gameState?.currentPlayer,
+                        addReinforcement: true,
+                        reservePieceId: pieceToAdd.id,
+                      }),
+                    });
+
+                    if (!response.ok) {
+                      const errorData = await response.json();
+                      throw new Error(errorData.message || 'Erreur lors de l\'ajout du renfort');
+                    }
+
+                    const updatedGame = await response.json();
+                    setGameState(updatedGame);
+                    setError(null);
+                    setConfirmModalOpen(false);
+                    setPieceToAdd(null);
+                  } catch (err: any) {
+                    console.error('Error adding reinforcement:', err);
+                    setError(err.message);
+                    setConfirmModalOpen(false);
+                    setPieceToAdd(null);
+                  }
+                }}
+              >
+                Confirmer
+              </Button>
+            </Group>
+          </Stack>
+        </Modal>
       </Stack>
     </Container>
   );
