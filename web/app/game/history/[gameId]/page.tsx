@@ -16,7 +16,7 @@ import {
   LoadingOverlay,
   Select,
 } from '@mantine/core';
-import { GameBoard } from '../../components/GameBoard';
+import { GameBoard } from '../../../components/GameBoard';
 import { GameState } from '../../../lib/gameTypes';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';

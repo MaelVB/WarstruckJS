@@ -9,6 +9,7 @@ import { DeckSelection } from '../../components/DeckSelection';
 import { SetupReinforcements } from '../../components/SetupReinforcements';
 import { ReserveZone } from '../../components/ReserveZone';
 import { GameState, Position, BoardPiece, PlayerId, PieceId, ReservePiece } from '../../../lib/gameTypes';
+import { getAttackTargets, getInfluencePositions, getMovementTargets } from '../../../lib/boardZones';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -57,9 +58,20 @@ export default function GameIdPage() {
   const [selectedPiece, setSelectedPiece] = useState<BoardPiece | null>(null);
   const [selectedPosition, setSelectedPosition] = useState<Position | null>(null);
   const [validMoves, setValidMoves] = useState<Position[]>([]);
+  const [validAttacks, setValidAttacks] = useState<Position[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
   const [pieceToAdd, setPieceToAdd] = useState<ReservePiece | null>(null);
+
+  const influencePositions = gameState
+    ? getInfluencePositions(gameState.board, gameState.currentPlayer)
+    : [];
+
+  const isPositionEqual = (left: Position, right: Position) =>
+    left.row === right.row && left.col === right.col;
+
+  const isPositionInList = (positions: Position[], target: Position) =>
+    positions.some(position => isPositionEqual(position, target));
 
   // Charger la partie depuis le serveur
   useEffect(() => {
@@ -205,6 +217,7 @@ export default function GameIdPage() {
       setSelectedPiece(null);
       setSelectedPosition(null);
       setValidMoves([]);
+      setValidAttacks([]);
     } catch (err: any) {
       console.error('Error executing action:', err);
       setError(err.message || 'Erreur lors de l\'exécution de l\'action');
@@ -216,7 +229,7 @@ export default function GameIdPage() {
     if (!gameState || gameState.phase !== 'playing') return;
 
     const currentPlayer = gameState.players[gameState.currentPlayer];
-    
+
     if (currentPlayer.actionPoints <= 0) {
       setError('Plus de points d\'action ! Vous devez terminer votre tour.');
       return;
@@ -224,87 +237,92 @@ export default function GameIdPage() {
 
     const clickedPiece = gameState.board[position.row][position.col];
 
-    // Si une pièce est sélectionnée et on clique sur une case valide
-    if (selectedPiece && validMoves.some(m => m.row === position.row && m.col === position.col)) {
-      // Vérifier si c'est un déploiement depuis la colonne des renforts (H1/H8)
-      const isDeployment = selectedPosition && selectedPosition.col === 7;
-      
-      const action = {
-        type: isDeployment ? 'deployFromReinforcements' : 'move',
-        pieceId: selectedPiece.id,
-        from: selectedPosition,
-        to: position,
-      };
+    if (selectedPiece) {
+      if (isPositionInList(validMoves, position)) {
+        const isDeployment = selectedPosition && selectedPosition.col === 7;
 
-      executeAction(gameState.currentPlayer, action);
-      return;
+        const action = {
+          type: isDeployment ? 'deployFromReinforcements' : 'move',
+          pieceId: selectedPiece.id,
+          from: selectedPosition,
+          to: position,
+        };
+
+        executeAction(gameState.currentPlayer, action);
+        return;
+      }
+
+      if (isPositionInList(validAttacks, position)) {
+        const targetPiece = gameState.board[position.row][position.col];
+        if (!targetPiece) {
+          return;
+        }
+
+        const action = {
+          type: 'attack',
+          pieceId: selectedPiece.id,
+          targetPieceId: targetPiece.id,
+        };
+
+        executeAction(gameState.currentPlayer, action);
+        return;
+      }
     }
 
-    // Sélectionner une pièce du joueur actuel
     if (clickedPiece && clickedPiece.owner === gameState.currentPlayer) {
-      // Gestion spéciale pour la colonne des renforts (colonne H = col 7)
       if (position.col === 7) {
-        // ✅ PERMETTRE la sélection de la pièce déployable (H1 pour player1, H8 pour player2)
         const isDeployablePosition = (gameState.currentPlayer === 'player1' && position.row === 7) ||
                                       (gameState.currentPlayer === 'player2' && position.row === 0);
-        
+
         if (isDeployablePosition) {
-          // La pièce en H1/H8 peut être déployée sur n'importe quelle case vide de sa ligne
           setSelectedPiece(clickedPiece);
           setSelectedPosition(position);
           setError(null);
-          
+
           const possibleMoves: Position[] = [];
-          const deploymentRow = position.row; // Même ligne (1 ou 8)
-          
-          // Parcourir toutes les colonnes de la ligne de déploiement (sauf H)
+          const deploymentRow = position.row;
+
           for (let col = 0; col < 7; col++) {
             const targetPiece = gameState.board[deploymentRow][col];
             if (!targetPiece) {
               possibleMoves.push({ row: deploymentRow, col });
             }
           }
-          
+
           setValidMoves(possibleMoves);
+          setValidAttacks([]);
         } else {
-          // ❌ Les autres pièces de renfort ne sont pas sélectionnables (pas de message d'erreur)
           setSelectedPiece(null);
           setSelectedPosition(null);
           setValidMoves([]);
+          setValidAttacks([]);
         }
         return;
       }
-      
-      // Pièce normale sur le plateau (pas en colonne H)
+
       setSelectedPiece(clickedPiece);
       setSelectedPosition(position);
       setError(null);
-      
-      const possibleMoves: Position[] = [];
 
-      // Déplacements adjacents simples pour la démo
-      for (let dr = -1; dr <= 1; dr++) {
-        for (let dc = -1; dc <= 1; dc++) {
-          if (dr === 0 && dc === 0) continue;
-          const newRow = position.row + dr;
-          const newCol = position.col + dc;
-          if (newRow >= 0 && newRow < 8 && newCol >= 0 && newCol < 7) {
-            const targetPiece = gameState.board[newRow][newCol];
-            if (!targetPiece || targetPiece.owner !== gameState.currentPlayer) {
-              possibleMoves.push({ row: newRow, col: newCol });
-            }
-          }
-        }
+      if (!isPositionInList(influencePositions, position)) {
+        setError('Cette piece est hors de la zone d\'influence');
+        setValidMoves([]);
+        setValidAttacks([]);
+        return;
       }
-      
+
+      const possibleMoves = getMovementTargets(gameState.board, clickedPiece);
+      const possibleAttacks = getAttackTargets(gameState.board, clickedPiece);
+
       setValidMoves(possibleMoves);
+      setValidAttacks(possibleAttacks);
     } else {
       setSelectedPiece(null);
       setSelectedPosition(null);
       setValidMoves([]);
+      setValidAttacks([]);
     }
   };
-
   // Terminer le tour
   const endTurn = async () => {
     if (!gameState) return;
@@ -471,6 +489,7 @@ export default function GameIdPage() {
               <div style={{ flex: '0 0 auto' }}>
                 <GameBoard
                   board={gameState.board}
+                  influencePositions={influencePositions}
                   currentPlayerId={gameState.currentPlayer}
                 />
               </div>
@@ -539,6 +558,8 @@ export default function GameIdPage() {
                   board={gameState.board}
                   selectedPosition={selectedPosition || undefined}
                   validMoves={validMoves}
+                  attackPositions={validAttacks}
+                  influencePositions={influencePositions}
                   currentPlayerId={gameState.currentPlayer}
                   onCellClick={handleCellClick}
                 />

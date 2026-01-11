@@ -14,6 +14,80 @@ import {
 } from './interfaces/game.interface';
 import { GamePersistenceService } from './game-persistence.service';
 
+type Offset = { row: number; col: number };
+
+const ADJACENT_OFFSETS: Offset[] = [
+  { row: -1, col: -1 },
+  { row: -1, col: 0 },
+  { row: -1, col: 1 },
+  { row: 0, col: -1 },
+  { row: 0, col: 1 },
+  { row: 1, col: -1 },
+  { row: 1, col: 0 },
+  { row: 1, col: 1 },
+];
+
+const ORTHOGONAL_OFFSETS: Offset[] = [
+  { row: -1, col: 0 },
+  { row: 0, col: -1 },
+  { row: 0, col: 1 },
+  { row: 1, col: 0 },
+];
+
+const DIAGONAL_OFFSETS: Offset[] = [
+  { row: -1, col: -1 },
+  { row: -1, col: 1 },
+  { row: 1, col: -1 },
+  { row: 1, col: 1 },
+];
+
+const createManhattanOffsets = (radius: number, includeCenter: boolean): Offset[] => {
+  const offsets: Offset[] = [];
+  for (let dr = -radius; dr <= radius; dr++) {
+    for (let dc = -radius; dc <= radius; dc++) {
+      const distance = Math.abs(dr) + Math.abs(dc);
+      if (distance > radius) {
+        continue;
+      }
+      if (!includeCenter && dr === 0 && dc === 0) {
+        continue;
+      }
+      offsets.push({ row: dr, col: dc });
+    }
+  }
+  return offsets;
+};
+
+const INFANTRYMAN_MOVEMENT_OFFSETS = createManhattanOffsets(2, false);
+const GENERAL_INFLUENCE_OFFSETS = createManhattanOffsets(2, true);
+
+const SCOUT_MOVEMENT_OFFSETS: Offset[] = [
+  ...ADJACENT_OFFSETS,
+  { row: -2, col: -2 },
+  { row: -2, col: 2 },
+  { row: 2, col: -2 },
+  { row: 2, col: 2 },
+];
+
+const MOVEMENT_OFFSETS: Record<PieceId, Offset[]> = {
+  general: ADJACENT_OFFSETS,
+  colonel: ADJACENT_OFFSETS,
+  infantryman: INFANTRYMAN_MOVEMENT_OFFSETS,
+  scout: SCOUT_MOVEMENT_OFFSETS,
+};
+
+const ATTACK_OFFSETS: Record<PieceId, Offset[]> = {
+  general: ORTHOGONAL_OFFSETS,
+  colonel: ORTHOGONAL_OFFSETS,
+  infantryman: ADJACENT_OFFSETS,
+  scout: DIAGONAL_OFFSETS,
+};
+
+const INFLUENCE_OFFSETS: Partial<Record<PieceId, Offset[]>> = {
+  general: GENERAL_INFLUENCE_OFFSETS,
+  colonel: [{ row: 0, col: 0 }, ...ORTHOGONAL_OFFSETS],
+};
+
 @Injectable()
 export class GameBoardService {
   private readonly logger = new Logger(GameBoardService.name);
@@ -537,8 +611,8 @@ export class GameBoardService {
     }
 
     // Vérifier que la destination est valide (dans les limites du plateau)
-    if (!this.isValidPosition(action.to)) {
-      throw new BadRequestException('Position de destination invalide');
+    if (!this.isActiveBoardPosition(action.to)) {
+      throw new BadRequestException('La destination doit etre sur le terrain actif (colonnes A-G)');
     }
 
     // Vérifier si la pièce est dans la colonne des renforts (colonne H = col 7)
@@ -555,17 +629,19 @@ export class GameBoardService {
       );
     }
 
-    // TODO: Valider que le déplacement est dans la zone de mouvement de la pièce
-    // TODO: Vérifier qu'il n'y a pas de pièce alliée sur la destination
-    // TODO: Gérer la destruction d'une pièce adverse si elle est sur la destination
+
+    if (!this.isWithinAlliedInfluence(game, piece)) {
+      throw new BadRequestException('La piece n\'est pas dans une zone d\'influence alliee');
+    }
+
+    if (!this.isWithinMovementZone(piece, action.to)) {
+      throw new BadRequestException('Deplacement hors de la zone de mouvement de la piece');
+    }
 
     const targetPiece = game.board[action.to.row][action.to.col];
     
-    // Si une pièce adverse est sur la destination, la détruire
-    if (targetPiece && targetPiece.owner !== game.currentPlayer) {
-      this.destroyPiece(game, targetPiece);
-    } else if (targetPiece && targetPiece.owner === game.currentPlayer) {
-      throw new BadRequestException('Vous ne pouvez pas vous déplacer sur une pièce alliée');
+    if (targetPiece) {
+      throw new BadRequestException('La case de destination est occupee');
     }
 
     // Effacer l'ancienne position
@@ -599,7 +675,21 @@ export class GameBoardService {
       throw new BadRequestException('Vous ne pouvez pas attaquer vos propres pièces');
     }
 
-    // TODO: Valider que la cible est dans la zone d'attaque
+    if (attacker.position.col === 7) {
+      throw new BadRequestException('Les pieces dans la colonne des renforts ne peuvent pas attaquer');
+    }
+
+    if (target.position.col === 7) {
+      throw new BadRequestException('Impossible d\'attaquer une piece dans la colonne des renforts');
+    }
+
+    if (!this.isWithinAlliedInfluence(game, attacker)) {
+      throw new BadRequestException('La piece n\'est pas dans une zone d\'influence alliee');
+    }
+
+    if (!this.isWithinAttackZone(attacker, target.position)) {
+      throw new BadRequestException('La cible est hors de la zone d\'attaque');
+    }
 
     this.destroyPiece(game, target);
   }
@@ -737,6 +827,14 @@ export class GameBoardService {
 
     if (piece.owner !== game.currentPlayer) {
       throw new BadRequestException('Vous ne pouvez utiliser que les capacités de vos pièces');
+    }
+
+    if (piece.position.col === 7) {
+      throw new BadRequestException('Les pieces dans la colonne des renforts ne peuvent pas utiliser de capacite');
+    }
+
+    if (!this.isWithinAlliedInfluence(game, piece)) {
+      throw new BadRequestException('La piece n\'est pas dans une zone d\'influence alliee');
     }
 
     const remainingCharges = piece.usedAbilities[action.abilityName];
@@ -981,6 +1079,48 @@ export class GameBoardService {
    */
   private isValidPosition(pos: Position): boolean {
     return pos.row >= 0 && pos.row < 8 && pos.col >= 0 && pos.col < 8;
+  }
+
+  private isActiveBoardPosition(pos: Position): boolean {
+    return pos.row >= 0 && pos.row < 8 && pos.col >= 0 && pos.col < 7;
+  }
+
+  private isWithinOffsets(source: Position, target: Position, offsets: Offset[]): boolean {
+    const rowOffset = target.row - source.row;
+    const colOffset = target.col - source.col;
+    return offsets.some(offset => offset.row === rowOffset && offset.col === colOffset);
+  }
+
+  private isWithinMovementZone(piece: BoardPiece, target: Position): boolean {
+    const offsets = MOVEMENT_OFFSETS[piece.pieceType] || [];
+    return this.isWithinOffsets(piece.position, target, offsets);
+  }
+
+  private isWithinAttackZone(piece: BoardPiece, target: Position): boolean {
+    const offsets = ATTACK_OFFSETS[piece.pieceType] || [];
+    return this.isWithinOffsets(piece.position, target, offsets);
+  }
+
+  private isWithinAlliedInfluence(game: GameState, piece: BoardPiece): boolean {
+    for (let row = 0; row < 8; row++) {
+      for (let col = 0; col < 7; col++) {
+        const source = game.board[row][col];
+        if (!source) {
+          continue;
+        }
+        if (source.owner !== piece.owner) {
+          continue;
+        }
+        const offsets = INFLUENCE_OFFSETS[source.pieceType];
+        if (!offsets) {
+          continue;
+        }
+        if (this.isWithinOffsets(source.position, piece.position, offsets)) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   /**

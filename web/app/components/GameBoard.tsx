@@ -8,6 +8,8 @@ interface BoardCellProps {
   piece: BoardPiece | null;
   position: Position;
   isHighlighted?: boolean;
+  isAttackTarget?: boolean;
+  isInfluence?: boolean;
   isDeploymentRow?: boolean;
   isFrontierRow?: boolean;
   isReinforcementColumn?: boolean;
@@ -15,7 +17,7 @@ interface BoardCellProps {
   onClick?: () => void;
 }
 
-function BoardCell({ piece, position, isHighlighted, isDeploymentRow, isFrontierRow, isReinforcementColumn, currentPlayerId, onClick }: BoardCellProps) {
+function BoardCell({ piece, position, isHighlighted, isAttackTarget, isInfluence, isDeploymentRow, isFrontierRow, isReinforcementColumn, currentPlayerId, onClick }: BoardCellProps) {
   // Couleur de la case (échiquier)
   const isLightSquare = (position.row + position.col) % 2 === 0;
   let bgColor = isLightSquare ? '#f0d9b5' : '#b58863';
@@ -27,6 +29,10 @@ function BoardCell({ piece, position, isHighlighted, isDeploymentRow, isFrontier
     bgColor = isLightSquare ? '#e6e6fa' : '#9370db';
   }
   
+  if (isAttackTarget) {
+    bgColor = '#f5b0b0';
+  }
+
   // Surbrillance pour sélection
   if (isHighlighted) {
     bgColor = '#90ee90';
@@ -66,6 +72,8 @@ function BoardCell({ piece, position, isHighlighted, isDeploymentRow, isFrontier
     return piece.faceUp;
   };
 
+  const cursor = isAttackTarget ? 'crosshair' : onClick ? 'pointer' : 'default';
+
   return (
     <Paper
       shadow="xs"
@@ -75,7 +83,7 @@ function BoardCell({ piece, position, isHighlighted, isDeploymentRow, isFrontier
         width: 60,
         height: 60,
         backgroundColor: bgColor,
-        cursor: onClick ? 'pointer' : 'default',
+        cursor,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -84,6 +92,17 @@ function BoardCell({ piece, position, isHighlighted, isDeploymentRow, isFrontier
       }}
       onClick={onClick}
     >
+      {isInfluence && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            backgroundColor: 'rgba(80, 140, 255, 0.25)',
+            pointerEvents: 'none',
+            zIndex: 1,
+          }}
+        />
+      )}
       {piece ? (
         shouldRevealPiece() ? (
           <ThemeIcon
@@ -91,6 +110,7 @@ function BoardCell({ piece, position, isHighlighted, isDeploymentRow, isFrontier
             radius="xl"
             color={getPieceColor(piece.owner)}
             variant="filled"
+            style={{ position: 'relative', zIndex: 2 }}
           >
             {(() => {
               const Icon = getPieceIcon(piece.pieceType);
@@ -103,6 +123,7 @@ function BoardCell({ piece, position, isHighlighted, isDeploymentRow, isFrontier
             radius="xl"
             color="gray"
             variant="filled"
+            style={{ position: 'relative', zIndex: 2 }}
           >
             <Text size="sm">?</Text>
           </ThemeIcon>
@@ -118,6 +139,7 @@ function BoardCell({ piece, position, isHighlighted, isDeploymentRow, isFrontier
           bottom: 2,
           right: 4,
           fontSize: 8,
+          zIndex: 3,
         }}
       >
         {String.fromCharCode(65 + position.col)}{8 - position.row}
@@ -130,22 +152,23 @@ interface GameBoardProps {
   board: (BoardPiece | null)[][];
   selectedPosition?: Position;
   validMoves?: Position[];
+  attackPositions?: Position[];
+  influencePositions?: Position[];
   currentPlayerId?: string;
   onCellClick?: (position: Position) => void;
 }
 
-export function GameBoard({ board, selectedPosition, validMoves = [], currentPlayerId, onCellClick }: GameBoardProps) {
-  const isPositionEqual = (pos1: Position, pos2: Position) => {
-    return pos1.row === pos2.row && pos1.col === pos2.col;
-  };
+export function GameBoard({ board, selectedPosition, validMoves = [], attackPositions = [], influencePositions = [], currentPlayerId, onCellClick }: GameBoardProps) {
+  const toKey = (position: Position) => `${position.row}-${position.col}`;
+  const validMoveKeys = new Set(validMoves.map(toKey));
+  const attackKeys = new Set(attackPositions.map(toKey));
+  const influenceKeys = new Set(influencePositions.map(toKey));
+  const selectedKey = selectedPosition ? toKey(selectedPosition) : null;
 
-  const isValidMove = (position: Position) => {
-    return validMoves.some(move => isPositionEqual(move, position));
-  };
-
-  const isSelected = (position: Position) => {
-    return selectedPosition ? isPositionEqual(selectedPosition, position) : false;
-  };
+  const isValidMove = (position: Position) => validMoveKeys.has(toKey(position));
+  const isAttackTarget = (position: Position) => attackKeys.has(toKey(position));
+  const isInfluence = (position: Position) => influenceKeys.has(toKey(position));
+  const isSelected = (position: Position) => selectedKey === toKey(position);
 
   return (
     <Stack gap="xs" style={{ position: 'relative' }}>
@@ -193,6 +216,8 @@ export function GameBoard({ board, selectedPosition, validMoves = [], currentPla
                       piece={piece}
                       position={position}
                       isHighlighted={isSelected(position) || isValidMove(position)}
+                      isAttackTarget={isAttackTarget(position)}
+                      isInfluence={isInfluence(position)}
                       isDeploymentRow={rowIndex === 0 || rowIndex === 7}
                       isFrontierRow={rowIndex === 3 || rowIndex === 4}
                       isReinforcementColumn={colIndex === 7}
