@@ -110,6 +110,10 @@ export class GameSocketClient {
     this.socket?.emit('get-game-state', { gameId });
   }
 
+  completePostTurn(gameId: string, playerId: string, addReinforcement: boolean, reservePieceId?: string): void {
+    this.socket?.emit('complete-post-turn', { gameId, playerId, addReinforcement, reservePieceId });
+  }
+
   // ===== Game Events =====
 
   onGameUpdated(callback: (gameState: GameState) => void): void {

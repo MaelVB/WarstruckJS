@@ -34,6 +34,14 @@ export default function HomePage() {
           </Button>
           <Button
             size="lg"
+            onClick={() => router.push('/matchmaking')}
+            color="green"
+            variant="filled"
+          >
+            Jouer (Mode Classique)
+          </Button>
+          <Button
+            size="lg"
             variant="outline"
             onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })}
           >
